@@ -1,70 +1,70 @@
-# Simulazione del Processo Frazionario di Ornstein-Uhlenbeck
+# Fractional Ornstein-Uhlenbeck Process Simulation
 
-Questa repository contiene uno script Python per simulare il processo frazionario di Ornstein-Uhlenbeck (fOU), con un focus sui casi in cui l'esponente frazionario (α) è 1/2 e 1/3. Lo scopo è fornire un'implementazione minima, autoconsistente e corretta per calcolare e visualizzare la funzione di densità di probabilità (PDF) di questo processo.
+This repository contains a Python script to simulate the fractional Ornstein-Uhlenbeck (fOU) process, with a focus on cases where the fractional exponent (α) is 1/2 and 1/3. The goal is to provide a minimal, self-contained, and correct implementation to calculate and visualize the probability density function (PDF) of this process.
 
-## Contenuto della Repository
+## Repository Contents
 
-- **`code2.py`**: Lo script principale che esegue la simulazione. Calcola la PDF del processo fOU utilizzando due metodi differenti e genera una serie di grafici per visualizzare i risultati.
-- **`test_code2.py`**: Una suite di unit test per lo script `code2.py` per garantire la correttezza delle funzioni implementate.
-- **`hermite_check.py`**: Uno script di utilità per verificare l'implementazione delle funzioni di Hermite utilizzate nel metodo delle serie spettrali.
+- **`code2.py`**: The main script that runs the simulation. It calculates the PDF of the fOU process using two different methods and generates a series of plots to visualize the results.
+- **`test_code2.py`**: A suite of unit tests for the `code2.py` script to ensure the correctness of the implemented functions.
+- **`hermite_check.py`**: A utility script to verify the implementation of the Hermite functions used in the spectral series method.
 
-## Cosa fa il codice
+## What the code does
 
-Lo script `code2.py` implementa due approcci per calcolare la PDF del processo fOU:
+The `code2.py` script implements two approaches to calculate the PDF of the fOU process:
 
-1.  **Metodo della Mappa Integrale**: Questo metodo si basa sulla forma analitica di Smirnov per la densità di Lévy. La PDF `P(x,t)` viene calcolata come un integrale della convoluzione tra la PDF `n(s,t)` dei tempi di attesa e il kernel Gaussiano del processo di Ornstein-Uhlenbeck `P1(x,s)`. L'integrazione viene eseguita numericamente su una griglia di valori di `s`.
+1.  **Integral Map Method**: This method is based on the analytical Smirnov form of the Lévy density. The PDF `P(x,t)` is calculated as an integral of the convolution between the waiting time PDF `n(s,t)` and the Gaussian kernel of the Ornstein-Uhlenbeck process `P1(x,s)`. The integration is performed numerically over a grid of `s` values.
 
-2.  **Metodo delle Serie Spettrali**: Questo approccio alternativo calcola la PDF come una serie di autofunzioni del processo di Ornstein-Uhlenbeck (funzioni di Hermite). L'evoluzione temporale è catturata da un fattore che include la funzione di Mittag-Leffler.
+2.  **Spectral Series Method**: This alternative approach calculates the PDF as a series of eigenfunctions of the Ornstein-Uhlenbeck process (Hermite functions). The time evolution is captured by a factor that includes the Mittag-Leffler function.
 
-Lo script genera i seguenti output:
+The script generates the following outputs:
 
-- **`fig6_alpha_0_500.png`**: Evoluzione temporale della PDF per α = 1/2.
-- **`fig6_alpha_0_333.png`**: Evoluzione temporale della PDF per α = 1/3.
-- **`fig6_comparison_panels.png`**: Un confronto diretto tra le PDF per α = 1/2 e α = 1/3 a diversi istanti di tempo.
-- **`fig6_spectral_vs_integral.png`**: Un confronto tra il metodo della mappa integrale e il metodo delle serie spettrali per α = 1/3, mostrando la convergenza all'aumentare del numero di termini nella serie.
+- **`fig6_alpha_0_500.png`**: Time evolution of the PDF for α = 1/2.
+- **`fig6_alpha_0_333.png`**: Time evolution of the PDF for α = 1/3.
+- **`fig6_comparison_panels.png`**: A direct comparison between the PDFs for α = 1/2 and α = 1/3 at different time points.
+- **`fig6_spectral_vs_integral.png`**: A comparison between the integral map method and the spectral series method for α = 1/3, showing the convergence as the number of terms in the series increases.
 
-## Come usare la repository
+## How to use the repository
 
-### Prerequisiti
+### Prerequisites
 
-Assicurati di avere installato le seguenti librerie Python:
+Make sure you have the following Python libraries installed:
 
 - `numpy`
 - `matplotlib`
 - `scipy`
 
-Puoi installarle usando pip:
+You can install them using pip:
 ```bash
 pip install numpy matplotlib scipy
 ```
 
-### Eseguire la simulazione
+### Run the simulation
 
-Per eseguire la simulazione e generare i grafici, esegui lo script `code2.py`:
+To run the simulation and generate the plots, execute the `code2.py` script:
 
 ```bash
 python code2.py
 ```
 
-I grafici verranno salvati nella directory principale della repository.
+The plots will be saved in the main directory of the repository.
 
-### Eseguire i test
+### Run the tests
 
-Per verificare la correttezza del codice, puoi eseguire la suite di test:
+To verify the correctness of the code, you can run the test suite:
 
 ```bash
 python test_code2.py
 ```
 
-### Verificare le funzioni di Hermite
+### Verify the Hermite functions
 
-Per controllare l'implementazione delle funzioni di Hermite, puoi eseguire lo script `hermite_check.py`:
+To check the implementation of the Hermite functions, you can run the `hermite_check.py` script:
 
 ```bash
 python hermite_check.py
 ```
-Questo script confronterà l'implementazione basata sulla ricorrenza con quella che utilizza la formula diretta di `scipy`, stampando le differenze.
+This script will compare the recurrence-based implementation with the one that uses the direct formula from `scipy`, printing the differences.
 
-## Scopo del progetto
+## Purpose of the project
 
-Lo scopo di questa repository è fornire un esempio chiaro, funzionante e verificato di come simulare il processo frazionario di Ornstein-Uhlenbeck. Può essere utile a studenti, ricercatori o chiunque sia interessato a processi stocastici e sistemi complessi, sia come strumento di apprendimento che come base per ulteriori ricerche.
+The purpose of this repository is to provide a clear, working, and verified example of how to simulate the fractional Ornstein-Uhlenbeck process. It can be useful for students, researchers, or anyone interested in stochastic processes and complex systems, both as a learning tool and as a basis for further research.
