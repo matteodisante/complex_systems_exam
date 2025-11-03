@@ -21,48 +21,60 @@ from scipy.special import kv
 from scipy.special import eval_hermite, gammaln
 
 # Mittag-Leffler function wrapper
+_mittag_method = None  # Track which method is being used
+
 def mittag_leffler(alpha, z):
     """Compute Mittag-Leffler function E_alpha(z)."""
-    try:
-        from scipy.special import mittag_leffler as _scipy_mittag
-        return _scipy_mittag(alpha, z)
-    except Exception:
-        pass
+    global _mittag_method
+    
+    # Try scipy first (preferred)
+    if _mittag_method != "scipy":
+        try:
+            from scipy.special import mittag_leffler as _scipy_mittag
+            _mittag_method = "scipy"
+            return _scipy_mittag(alpha, z)
+        except Exception:
+            pass
 
-    try:
-        import mpmath
-        mp = mpmath.mp
-        mp.dps = max(50, mp.dps)
-        if hasattr(mpmath, 'mittag_leffler'):
-            return float(mpmath.mittag_leffler(alpha, z))
-        if hasattr(mpmath, 'mittag'):
-            return float(mpmath.mittag(alpha, z))
-
-        alpha_mp = mp.mpf(alpha)
-        z_mp = mp.mpf(z)
-        def term(k):
-            kmp = mp.mpf(k)
-            return (z_mp ** kmp) / mp.gamma(alpha_mp * kmp + 1)
-
-        val = mpmath.nsum(term, [0, mp.inf])
-        return float(val)
-    except Exception:
-        pass
+    # Try mpmath (high precision)
+    if _mittag_method != "mpmath":
+        try:
+            import mpmath
+            mp = mpmath.mp
+            mp.dps = max(50, mp.dps)
+            if hasattr(mpmath, 'mittag_leffler'):
+                _mittag_method = "mpmath"
+                return float(mpmath.mittag_leffler(alpha, z))
+            if hasattr(mpmath, 'mittag'):
+                _mittag_method = "mpmath"
+                return float(mpmath.mittag(alpha, z))
+            alpha_mp = mp.mpf(alpha)
+            z_mp = mp.mpf(z)
+            def term(k):
+                kmp = mp.mpf(k)
+                return (z_mp ** kmp) / mp.gamma(alpha_mp * kmp + 1)
+            val = mpmath.nsum(term, [0, mp.inf])
+            _mittag_method = "mpmath"
+            return float(val)
+        except Exception:
+            pass
 
     # Fallback: series in log-space
+    _mittag_method = "series"
     try:
         zf = float(z)
     except Exception:
         zf = complex(z)
 
-    max_terms = 2000
-    tol = 1e-12
     if zf == 0.0:
         return 1.0
 
+    max_terms = 2000
+    tol = 1e-12
     log_abs_z = math.log(abs(zf))
     s = 0.0
-    for k in range(0, max_terms):
+    
+    for k in range(max_terms):
         log_term = k * log_abs_z - gammaln(alpha * k + 1.0)
         if log_term < -50 and k > 10:
             break
@@ -70,10 +82,7 @@ def mittag_leffler(alpha, z):
             term_mag = math.exp(log_term)
         except OverflowError:
             break
-        if zf < 0:
-            term = term_mag * ((-1) ** k)
-        else:
-            term = term_mag
+        term = term_mag * ((-1) ** k) if zf < 0 else term_mag
         s += term
         if abs(term) < tol * max(1.0, abs(s)):
             break
@@ -258,6 +267,12 @@ def spectral_series_pdf(x_grid, t, x0, alpha, N, omega2_over_eta=1.0):
 
 def main():
     """Generate Figure 6 plots for α=1/2 (Smirnov) and α=1/3."""
+    global _mittag_method
+    
+    print("="*70)
+    print("Figure 6: Fractional OU Process (normalized Lévy densities)")
+    print("="*70)
+    print(f"Using Mittag-Leffler method: {_mittag_method if _mittag_method else 'auto-detecting...'}\n")
     
     alphas = [0.5, 1.0/3.0]
     gamma = 1.0
