@@ -1,11 +1,10 @@
 import unittest
 import numpy as np
+from scipy.integrate import quad
 from code2 import (
     # Functions from code2.py to be tested
     mittag_leffler,
-    l_smirnov_unnormalized,
-    l_alpha_unnormalized,
-    compute_l_normalization,
+    l_alpha,
     n_function_s_array,
     ou_kernel,
     compute_pdf_vectorized,
@@ -20,41 +19,31 @@ class TestCode2(unittest.TestCase):
         self.assertAlmostEqual(mittag_leffler(2, 0), 1, places=5)
         self.assertAlmostEqual(mittag_leffler(2, -1), np.cos(1), places=5)
 
-    def test_l_smirnov_unnormalized(self):
-        # Test for z > 0
+    def test_l_alpha(self):
+        # Test for alpha = 0.5 (Smirnov)
         z = np.array([1, 2, 3])
-        result = l_smirnov_unnormalized(z)
-        self.assertEqual(result.shape, z.shape)
-        self.assertTrue(np.all(result > 0))
-
-        # Test for z <= 0
-        z = np.array([-1, 0])
-        result = l_smirnov_unnormalized(z)
-        self.assertTrue(np.all(result == 0))
-
-    def test_l_alpha_unnormalized(self):
-        # Test for alpha = 0.5
-        z = np.array([1, 2, 3])
-        result = l_alpha_unnormalized(0.5, z)
+        result = l_alpha(0.5, z)
         self.assertEqual(result.shape, z.shape)
         self.assertTrue(np.all(result > 0))
 
         # Test for alpha = 1/3
         z = np.array([1, 2, 3])
-        result = l_alpha_unnormalized(1.0/3.0, z)
+        result = l_alpha(1.0/3.0, z)
         self.assertEqual(result.shape, z.shape)
         self.assertTrue(np.all(result > 0))
 
         # Test for unsupported alpha
         with self.assertRaises(ValueError):
-            l_alpha_unnormalized(0.8, z)
+            l_alpha(0.8, z)
 
-    def test_compute_l_normalization(self):
-        # Test for alpha = 0.5
-        self.assertAlmostEqual(compute_l_normalization(0.5), 1.0, places=5)
+        # Test normalization
+        norm_half, _ = quad(lambda z: l_alpha(0.5, z), 0, np.inf)
+        print(f"Numerical normalization for alpha=0.5: {norm_half}")
+        self.assertAlmostEqual(norm_half, 1.0, places=5)
 
-        # Test for alpha = 1/3
-        self.assertAlmostEqual(compute_l_normalization(1.0/3.0), 1.0, places=5)
+        norm_third, _ = quad(lambda z: l_alpha(1.0/3.0, z), 0, np.inf)
+        print(f"Numerical normalization for alpha=1/3: {norm_third}")
+        self.assertAlmostEqual(norm_third, 1.0, places=5)
 
     def test_n_function_s_array(self):
         s = np.array([1, 2, 3])
