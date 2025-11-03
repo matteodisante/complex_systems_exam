@@ -1,0 +1,5 @@
+# File immagine generati
+*.png
+
+# Cache di Python
+__pycache__/
