@@ -118,6 +118,30 @@ class TestCode2(unittest.TestCase):
         print(f"L1 difference from stationary at t={t_large}: {l1_diff}")
         self.assertLess(l1_diff, 1e-2)
 
+    def test_spectral_series_vs_standard_ou(self):
+        # For alpha=1, the spectral series should match the standard OU solution.
+        x_grid = np.linspace(-3, 3, 500)
+        t = 1.0
+        x0 = 0.5
+        alpha = 1.0
+        N = 50 # Use a higher N for better accuracy
+        m, omega, k_B, T, gamma = 1.0, 1.0, 1.0, 1.0, 1.0
+        K_beta = 1.0 # As used in code2.py
+
+        # 1. Calculate PDF from spectral series with alpha=1
+        pdf_spectral = spectral_series_pdf(x_grid, t, x0, alpha, N, m, omega, k_B, T, gamma)
+
+        # 2. Calculate analytical PDF for standard OU process
+        mean_ou = x0 * np.exp(-gamma * t)
+        # Variance for standard OU is (K_beta/gamma) * (1 - exp(-2*gamma*t))
+        variance_ou = (K_beta / gamma) * (1 - np.exp(-2 * gamma * t))
+        pdf_ou_analytical = (1.0 / np.sqrt(2 * np.pi * variance_ou)) * \
+                            np.exp(-0.5 * (x_grid - mean_ou)**2 / variance_ou)
+
+        # 3. Compare the two results
+        l1_diff = np.trapezoid(np.abs(pdf_spectral - pdf_ou_analytical), x_grid)
+        print(f"L1 difference between spectral (alpha=1) and standard OU at t={t}: {l1_diff}")
+        self.assertLess(l1_diff, 1e-3) # Set a reasonably strict tolerance
 
 if __name__ == '__main__':
     unittest.main()
