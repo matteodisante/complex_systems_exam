@@ -17,7 +17,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import quad
 import math
-from scipy.special import kv
+import time
+from scipy.special import kv, factorial
 from numpy.polynomial.hermite import Hermite
 from scipy.special import eval_hermite, gammaln
 # Improve default plotting for slide readability
@@ -154,91 +155,83 @@ def mittag_leffler(alpha, z):
         pass
 
 
-def spectral_series_pdf(x_grid, t, x0, alpha, N, omega2_over_eta=1.0, K_beta=1.0):
-    """Compute spectral series approximation (Eq.18-like) for fractional OU.
 
-    Uses eigenfunctions (Hermite functions) and Mittag-Leffler temporal factor
-    E_alpha(-lambda_n t^alpha). Assumes lambda_n = n * omega2_over_eta.
+def spectral_series_pdf(x_grid, t, x0, alpha, N, m, omega, k_B, T, gamma=1.0):
     """
-    x = np.asarray(x_grid)
+    Exact implementation of Equation (18) from the paper for harmonic potential.
+    
+    This computes the PDF for a fractional OU process with harmonic potential V(x) = (1/2)*m*ω²*x²
+    using the exact spectral series with non-normalized Hermite polynomials.
+    
+    Equation (18) from the paper:
+    W = √(mω²/2πk_B T) * Σ_{n=0}^∞ [1/(2^n n!)] * E_alpha(-lambda_n * t^alpha) * H_n(x̃/√2) * H_n(x̃'/√2) * exp(-x̃²/2)
 
-    # --- Step 1: Initialize the first two orthonormal Hermite functions (n=0 and n=1) ---
-    # These functions, ψ_n(x), are the eigenfunctions of the OU operator.
-    # We calculate them for the grid of points 'x' and for the single initial point 'x0'.
-    # ψ_0(x) is a Gaussian.
-    psi_nm1_x = (np.pi ** -0.25) * np.exp(-0.5 * x**2)
-    # ψ_1(x) is calculated from ψ_0(x).
-    psi_n_x = np.sqrt(2.0) * x * psi_nm1_x
-
-    # Do the same for the initial condition x0 (these will be scalar values).
-    psi_nm1_x0 = (np.pi ** -0.25) * math.exp(-0.5 * x0**2)
-    psi_n_x0 = math.sqrt(2.0) * x0 * psi_nm1_x0
-
-    # Initialize the series sum. Each term of the expansion will be added to this array.
-    series = np.zeros(x.size, dtype=float)
-
-    # --- Step 2: Add the n=0 term of the series ---
-    # The n=0 eigenvalue is zero, which corresponds to the stationary state.
-    lambda_0 = 0.0
-    # The Mittag-Leffler function E_α(0) is always 1.
-    E0 = mittag_leffler(alpha, -lambda_0 * (t**alpha))
-    # The term is E_α * ψ_0(x) * ψ_0(x0).
-    series += E0 * psi_nm1_x0 * psi_nm1_x
-
-    # If we only want the first term (N=1), we are done.
-    if N == 1:
-        series[series < 0] = 0.0
-        return series
-
-    # --- Step 3: Add the n=1 term of the series ---
-    lambda_1 = 1.0 * omega2_over_eta
-    E1 = mittag_leffler(alpha, -lambda_1 * (t**alpha))
-    # The term is E_α(-λ_1*t^α) * ψ_1(x) * ψ_1(x0).
-    series += E1 * psi_n_x0 * psi_n_x
-
-    # --- Step 4: Use a recurrence relation for all higher-order terms (n >= 2) ---
-    # This is computationally efficient. We store the previous two functions (ψ_{n-1}, ψ_n)
-    # to calculate the next one (ψ_{n+1}).
-    psi_prev_x = psi_nm1_x
-    psi_curr_x = psi_n_x
-    psi_prev_x0 = psi_nm1_x0
-    psi_curr_x0 = psi_n_x0
-
-    # Loop from n=1 up to N-2 to generate terms up to N-1.
-    for n in range(1, N-1):
-        # --- Step 4a: Use the three-term recurrence relation for orthonormal Hermite functions ---
-        # This relation is: ψ_{n+1}(x) = sqrt(2/(n+1)) * x * ψ_n(x) - sqrt(n/(n+1)) * ψ_{n-1}(x)
-        # It allows us to compute the next function in the sequence from the previous two.
-        # This is numerically stable and much more efficient than direct computation.
+    Parameters:
+    -----------
+    x_grid : array
+        Spatial grid points
+    t : float
+        Time
+    x0 : float
+        Initial position
+    alpha : float
+        Fractional order (0 < alpha ≤ 1)
+    N : int
+        Number of terms in the series
+    m : float
+        Mass
+    omega : float
+        Angular frequency
+    k_B : float
+        Boltzmann constant
+    T : float
+        Temperature
+    gamma : float
+        omega^2/eta_beta
+    
+    Returns:
+    --------
+    pdf : array
+        The probability density function at x_grid
+    """
+    x_grid = np.asarray(x_grid)
+    
+    # Dimensionless coordinates (scaled as in eq. 18)
+    x_tilde = x_grid * np.sqrt(m * omega**2 / (k_B * T))
+    x0_tilde = x0 * np.sqrt(m * omega**2 / (k_B * T))
+    
+    
+    # Normalization factor (from eq. 18)
+    norm_factor = np.sqrt(m * omega**2 / (2.0 * np.pi * k_B * T))
+    
+    # Initialize the PDF
+    pdf = np.zeros_like(x_grid, dtype=float)
+    
+    # Sum over the spectral series
+    for n in range(N):
+        # Eigenvalue: λ_{n,beta} = n * γ
+        lambda_n = n * gamma
         
-        nn = n # Current n in the recurrence
+        # Mittag-Leffler temporal factor: E_α(-λ_n * t^α)
+        ml_arg = -lambda_n * t**alpha
+        E_n = mittag_leffler(alpha, ml_arg)
         
-        # Coefficient for the x * ψ_n(x) term.
-        coef1 = math.sqrt(2.0 / (nn + 1.0))
-        # Coefficient for the ψ_{n-1}(x) term.
-        coef2 = math.sqrt(nn / (nn + 1.0))
+        # Coefficient from the series: 1/(2^n * n!)
+        coeff = 1.0 / (2**n * factorial(n))
         
-        psi_next_x = coef1 * x * psi_curr_x - coef2 * psi_prev_x
-        # We do the same for the scalar value at the initial point x0.
-        psi_next_x0 = coef1 * x0 * psi_curr_x0 - coef2 * psi_prev_x0
-
-        # Calculate the eigenvalue and the corresponding Mittag-Leffler temporal factor.
-        lambda_n = (nn + 1) * omega2_over_eta
-        z = -lambda_n * (t**alpha)
-        E_n = mittag_leffler(alpha, z)
-
-        # Add the full term for n+1 to the series.
-        series += E_n * psi_next_x0 * psi_next_x
-
-        # Update the 'previous' and 'current' functions for the next iteration.
-        psi_prev_x, psi_curr_x = psi_curr_x, psi_next_x
-        psi_prev_x0, psi_curr_x0 = psi_curr_x0, psi_next_x0
-
-    # Ensure the final PDF is non-negative due to potential numerical errors.
-    series[series < 0] = 0.0
-    return series
-
-
+        # Non-normalized Hermite polynomials evaluated at scaled coordinates
+        H_n_x_tilde = eval_hermite(n, x_tilde / np.sqrt(2.0))
+        H_n_x0_tilde = eval_hermite(n, x0_tilde / np.sqrt(2.0))
+        
+        # Gaussian factor: exp(-x̃²/2)
+        gaussian = np.exp(-x_tilde**2 / 2.0)
+        
+        # Add this term to the series
+        pdf += norm_factor * coeff * E_n * H_n_x_tilde * H_n_x0_tilde * gaussian
+    
+    # Ensure non-negative
+    pdf[pdf < 0] = 0.0
+    return pdf
 
 
 
@@ -250,7 +243,7 @@ def main():
     print("="*70)
     
     alphas = [0.5, 1.0/3.0]
-    gamma = 1.0
+    m, omega, k_B, T, gamma = 1.0, 1.0, 1.0, 1.0, 1.0
     K_beta = 1.0
     x0 = 0.5
     times = [0.01, 0.1, 1.0, 10.0, 100.0]
@@ -306,7 +299,7 @@ def main():
 
     # ========== Comparison panels for α=1/2 vs α=1/3 ==========
     print('Generating comparison panels: α = 1/2 vs α = 1/3')
-    panel_times = [0.02, 0.2, 20.0, 200.0]
+    panel_times = [0.01, 0.1, 1.0, 10.0, 100.0]
     x_panel = np.linspace(-0.5, 1.5, 600)
     fig, axes = plt.subplots(2, 2, figsize=(14, 10), sharey=True)
     axes = axes.flatten()
@@ -344,7 +337,7 @@ def main():
     print('Spectral series comparison (α = 1/3) vs integral map solution')
     alpha_spec = 1.0/3.0
     times_spec = times
-    Ns_list = [5, 20, 100, 500]
+    Ns_list = [5, 20, 100, 200]
     n_rows = len(times_spec)
     n_cols = len(Ns_list)
     x_spec = np.linspace(-0.5, 1.5, 400)
@@ -356,7 +349,8 @@ def main():
         for j, N in enumerate(Ns_list):
             ax = axes[i, j] if n_rows > 1 else axes[j]
             print(f'  time={t}, N={N}: computing spectral series')
-            spec = spectral_series_pdf(x_spec, t, x0, alpha_spec, N, omega2_over_eta=gamma)
+            spec = spectral_series_pdf(x_spec, t, x0, alpha_spec, N, m, omega, k_B, T, gamma)
+
             
             ax.plot(x_spec, ref, color='black', lw=2.5, label='integral', alpha=0.8)
             ax.plot(x_spec, spec, color='#d62728', lw=2, linestyle='--', label=f'N={N}', alpha=0.8)
