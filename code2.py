@@ -161,52 +161,80 @@ def spectral_series_pdf(x_grid, t, x0, alpha, N, omega2_over_eta=1.0, K_beta=1.0
     E_alpha(-lambda_n t^alpha). Assumes lambda_n = n * omega2_over_eta.
     """
     x = np.asarray(x_grid)
-    
-    # Orthonormal Hermite functions via recurrence
+
+    # --- Step 1: Initialize the first two orthonormal Hermite functions (n=0 and n=1) ---
+    # These functions, ψ_n(x), are the eigenfunctions of the OU operator.
+    # We calculate them for the grid of points 'x' and for the single initial point 'x0'.
+    # ψ_0(x) is a Gaussian.
     psi_nm1_x = (np.pi ** -0.25) * np.exp(-0.5 * x**2)
+    # ψ_1(x) is calculated from ψ_0(x).
     psi_n_x = np.sqrt(2.0) * x * psi_nm1_x
+
+    # Do the same for the initial condition x0 (these will be scalar values).
     psi_nm1_x0 = (np.pi ** -0.25) * math.exp(-0.5 * x0**2)
     psi_n_x0 = math.sqrt(2.0) * x0 * psi_nm1_x0
 
+    # Initialize the series sum. Each term of the expansion will be added to this array.
     series = np.zeros(x.size, dtype=float)
-    
-    # n=0 term (eigenvalue λ_0 = 0)
+
+    # --- Step 2: Add the n=0 term of the series ---
+    # The n=0 eigenvalue is zero, which corresponds to the stationary state.
     lambda_0 = 0.0
+    # The Mittag-Leffler function E_α(0) is always 1.
     E0 = mittag_leffler(alpha, -lambda_0 * (t**alpha))
+    # The term is E_α * ψ_0(x) * ψ_0(x0).
     series += E0 * psi_nm1_x0 * psi_nm1_x
 
+    # If we only want the first term (N=1), we are done.
     if N == 1:
         series[series < 0] = 0.0
         return series
 
-    # n=1 term
+    # --- Step 3: Add the n=1 term of the series ---
     lambda_1 = 1.0 * omega2_over_eta
     E1 = mittag_leffler(alpha, -lambda_1 * (t**alpha))
+    # The term is E_α(-λ_1*t^α) * ψ_1(x) * ψ_1(x0).
     series += E1 * psi_n_x0 * psi_n_x
 
-    # Recurrence for n >= 2
+    # --- Step 4: Use a recurrence relation for all higher-order terms (n >= 2) ---
+    # This is computationally efficient. We store the previous two functions (ψ_{n-1}, ψ_n)
+    # to calculate the next one (ψ_{n+1}).
     psi_prev_x = psi_nm1_x
     psi_curr_x = psi_n_x
     psi_prev_x0 = psi_nm1_x0
     psi_curr_x0 = psi_n_x0
 
+    # Loop from n=1 up to N-2 to generate terms up to N-1.
     for n in range(1, N-1):
-        nn = n
-        #print(f"Computing term for n={nn}...")
+        # --- Step 4a: Use the three-term recurrence relation for orthonormal Hermite functions ---
+        # This relation is: ψ_{n+1}(x) = sqrt(2/(n+1)) * x * ψ_n(x) - sqrt(n/(n+1)) * ψ_{n-1}(x)
+        # It allows us to compute the next function in the sequence from the previous two.
+        # This is numerically stable and much more efficient than direct computation.
+        
+        nn = n # Current n in the recurrence
+        
+        # Coefficient for the x * ψ_n(x) term.
         coef1 = math.sqrt(2.0 / (nn + 1.0))
+        # Coefficient for the ψ_{n-1}(x) term.
         coef2 = math.sqrt(nn / (nn + 1.0))
+        
         psi_next_x = coef1 * x * psi_curr_x - coef2 * psi_prev_x
+        # We do the same for the scalar value at the initial point x0.
         psi_next_x0 = coef1 * x0 * psi_curr_x0 - coef2 * psi_prev_x0
 
+        # Calculate the eigenvalue and the corresponding Mittag-Leffler temporal factor.
         lambda_n = (nn + 1) * omega2_over_eta
         z = -lambda_n * (t**alpha)
         E_n = mittag_leffler(alpha, z)
 
+        # Add the full term for n+1 to the series.
         series += E_n * psi_next_x0 * psi_next_x
 
+        # Update the 'previous' and 'current' functions for the next iteration.
         psi_prev_x, psi_curr_x = psi_curr_x, psi_next_x
         psi_prev_x0, psi_curr_x0 = psi_curr_x0, psi_next_x0
-    
+
+    # Ensure the final PDF is non-negative due to potential numerical errors.
     series[series < 0] = 0.0
     return series
 
