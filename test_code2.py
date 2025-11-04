@@ -69,14 +69,55 @@ class TestCode2(unittest.TestCase):
         self.assertTrue(np.all(pdf >= 0))
 
     def test_spectral_series_pdf(self):
+        # Test with the new signature
         x_grid = np.linspace(-1, 1, 10)
         t = 1.0
         x0 = 0.0
         alpha = 0.5
         N = 10
-        pdf = spectral_series_pdf(x_grid, t, x0, alpha, N)
+        m, omega, k_B, T, gamma = 1.0, 1.0, 1.0, 1.0, 1.0
+        pdf = spectral_series_pdf(x_grid, t, x0, alpha, N, m, omega, k_B, T, gamma)
         self.assertEqual(pdf.shape, x_grid.shape)
         self.assertTrue(np.all(pdf >= 0))
+
+    def test_spectral_series_pdf_normalization(self):
+        # Test that the PDF integrates to 1
+        x_grid = np.linspace(-5, 5, 500) # Wider grid for better integration
+        t = 1.0
+        x0 = 0.5
+        alpha = 1.0/3.0
+        N = 20 # Use a reasonable number of terms
+        m, omega, k_B, T, gamma = 1.0, 1.0, 1.0, 1.0, 1.0
+        
+        pdf = spectral_series_pdf(x_grid, t, x0, alpha, N, m, omega, k_B, T, gamma)
+        
+        integral_val = np.trapezoid(pdf, x_grid)
+        print(f"Numerical normalization for spectral series (N={N}, t={t}): {integral_val}")
+        self.assertAlmostEqual(integral_val, 1.0, places=3)
+
+    def test_spectral_series_stationary_state(self):
+        # For large t, the PDF should approach the stationary distribution
+        x_grid = np.linspace(-5, 5, 500)
+        t_large = 100000.0 
+        x0 = 0.5
+        alpha = 1.0/3.0
+        N = 5 # Only a few terms needed as higher terms decay faster
+        m, omega, k_B, T, gamma = 1.0, 1.0, 1.0, 1.0, 1.0
+
+        # Calculate from spectral series at large t
+        pdf_spectral = spectral_series_pdf(x_grid, t_large, x0, alpha, N, m, omega, k_B, T, gamma)
+
+        # Calculate the analytical stationary solution (Boltzmann distribution for harmonic potential)
+        # V(x) = 0.5 * m * omega^2 * x^2
+        # P_st(x) = Z * exp(-V(x)/(k_B T))
+        # With m=1, omega=1, k_B=1, T=1, this is (1/sqrt(2*pi)) * exp(-x^2/2)
+        pdf_stationary = (1.0 / np.sqrt(2 * np.pi)) * np.exp(-0.5 * x_grid**2)
+        
+        # Compare the two distributions using L1 norm
+        l1_diff = np.trapezoid(np.abs(pdf_spectral - pdf_stationary), x_grid)
+        print(f"L1 difference from stationary at t={t_large}: {l1_diff}")
+        self.assertLess(l1_diff, 1e-2)
+
 
 if __name__ == '__main__':
     unittest.main()
