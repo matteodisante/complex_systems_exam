@@ -1,12 +1,11 @@
 # Fractional Ornstein-Uhlenbeck Process Simulation
 
-This repository contains a Python script to simulate the fractional Ornstein-Uhlenbeck (fOU) process, with a focus on cases where the fractional exponent (α) is 1/2 and 1/3. The goal is to provide a minimal, self-contained, and correct implementation to calculate and visualize the probability density function (PDF) of this process.
+This repository contains a Python script to simulate the fractional Ornstein-Uhlenbeck (fOU) process, with a focus on cases where the fractional exponent (α) is 1/2 and 1/3, and compares them with the non-fractional case (α=0). The goal is to provide a minimal, self-contained, and correct implementation to calculate and visualize the probability density function (PDF) of this process.
 
 ## Repository Contents
 
 - **`code2.py`**: The main script that runs the simulation. It calculates the PDF of the fOU process using two different methods and generates a series of plots to visualize the results.
 - **`test_code2.py`**: A suite of unit tests for the `code2.py` script to ensure the correctness of the implemented functions.
-- **`hermite_check.py`**: A utility script to verify the implementation of the Hermite functions used in the spectral series method.
 
 ## What the code does
 
@@ -22,6 +21,7 @@ The script generates the following outputs:
 - **`fig6_alpha_0_333.png`**: Time evolution of the PDF for α = 1/3.
 - **`fig6_comparison_panels.png`**: A direct comparison between the PDFs for α = 1/2 and α = 1/3 at different time points.
 - **`fig6_spectral_vs_integral.png`**: A comparison between the integral map method and the spectral series method for α = 1/3, showing the convergence as the number of terms in the series increases.
+- **`fig6_fractional_vs_nonfractional.png`**: A comparison between the fractional (α=1/2, α=1/3) and non-fractional (α=0) Ornstein-Uhlenbeck process at different time points.
 
 ## How to use the repository
 
@@ -55,15 +55,6 @@ To verify the correctness of the code, you can run the test suite:
 ```bash
 python test_code2.py
 ```
-
-### Verify the Hermite functions
-
-To check the implementation of the Hermite functions, you can run the `hermite_check.py` script:
-
-```bash
-python hermite_check.py
-```
-This script will compare the recurrence-based implementation with the one that uses the direct formula from `scipy`, printing the differences.
 
 ## Purpose of the project
 
