@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Minimal, self-contained script to reproduce some key figures for the fractional OU, α=1/2 and α=1/3).
+Minimal, self-contained script to reproduce some key figures for the fractional OU,
+(α=1/2 and α=1/3) and compare them with the non-fractional case (α=0).
 
 Method:
  - Use analytical normalized Smirnov form for the Lévy density l_{1/2}(z).
@@ -17,28 +18,8 @@ import matplotlib.pyplot as plt
 from scipy.integrate import quad
 import math
 from scipy.special import kv
+from numpy.polynomial.hermite import Hermite
 from scipy.special import eval_hermite, gammaln
-
-
-
-def mittag_leffler(alpha, z):
-    """Compute Mittag-Leffler function E_alpha(z)."""
-        
-    try:
-        import mpmath
-        mp = mpmath.mp
-        mp.dps = max(50, mp.dps)
-        alpha_mp = mp.mpf(alpha)
-        z_mp = mp.mpf(z)
-        def term(k):
-            kmp = mp.mpf(k)
-            return (z_mp ** kmp) / mp.gamma(alpha_mp * kmp + 1)
-        val = mpmath.nsum(term, [0, mp.inf])
-        return float(val)
-    except Exception:
-        pass
-
-
 # Improve default plotting for slide readability
 plt.rcParams.update({
     'figure.dpi': 150,
@@ -50,7 +31,6 @@ plt.rcParams.update({
     'legend.title_fontsize': 12,
     'lines.linewidth': 3.0,
 })
-
 
 def l_alpha(alpha, z):
     """Normalized analytic Lévy densities for α=1/2 (Smirnov) and α=1/3.
@@ -83,7 +63,6 @@ def l_alpha(alpha, z):
 
     raise ValueError(f"Unsupported alpha: {alpha}")
 
-
 def n_function_s_array(s, t, alpha=0.5):
     """Compute n(s,t) on array s for given t and alpha.
     
@@ -99,11 +78,10 @@ def n_function_s_array(s, t, alpha=0.5):
     
     # Compute n(s,t)
     out = np.zeros_like(s, dtype=float)
-    mask = s > 0 # Avoid division by zero
+    mask = s > 0  # Avoid division by zero
     out[mask] = (1.0/alpha) * (t / (s[mask]**(1.0 + 1.0/alpha))) * lz[mask] 
-    out[~np.isfinite(out)] = 0.0 # Handle inf
+    out[~np.isfinite(out)] = 0.0  # Handle inf
     return out
-
 
 def ou_kernel(x_grid, s_grid, x0, gamma=1.0, K_beta=1.0):
     """Return P1(x,s) array with shape (len(x_grid), len(s_grid)).
@@ -123,7 +101,6 @@ def ou_kernel(x_grid, s_grid, x0, gamma=1.0, K_beta=1.0):
     V = variance[None, :]
     P1 = norm[None, :] * np.exp(-0.5 * (X - M)**2 / V)
     return P1
-
 
 def compute_pdf_vectorized(x_grid, t, x0, alpha=0.5, gamma=1.0, K_beta=1.0, s_max=None, Ns=1000):
     """Compute P(x,t) for array x_grid using vectorized s-grid integration.
@@ -149,30 +126,35 @@ def compute_pdf_vectorized(x_grid, t, x0, alpha=0.5, gamma=1.0, K_beta=1.0, s_ma
     # Compute n(s,t) with already-normalized Lévy densities
     n_vals = n_function_s_array(s, t, alpha=alpha)
 
-    # Trapezoidal weights for s integration
-   # ds = np.diff(s)
-   # weights = np.empty_like(s)
-    #weights[0] = ds[0] / 2.0
-    #weights[-1] = ds[-1] / 2.0
-    # weights[1:-1] = 0.5 * (ds[:-1] + ds[1:])
-
-    # Multiply n(s,t) values by the trapezoidal weights for integration.
-    #integrand_weights = n_vals * weights
-
     # Compute OU kernel P1(x,s)
     P1 = ou_kernel(x_grid, s, x0, gamma=gamma, K_beta=K_beta)
 
     # Integrate: for each x, P(x,t) = sum_s P1(x,s) * n(s)*ds using dot product.
-    #pdf = P1.dot(integrand_weights)
     pdf = np.trapezoid(P1 * n_vals, s)
-
 
     # Ensure pdf is non-negative
     pdf[pdf < 0] = 0.0
     return pdf
 
+def mittag_leffler(alpha, z):
+    """Compute Mittag-Leffler function E_alpha(z)."""
+        
+    try:
+        import mpmath
+        mp = mpmath.mp
+        mp.dps = max(50, mp.dps)
+        alpha_mp = mp.mpf(alpha)
+        z_mp = mp.mpf(z)
+        def term(k):
+            kmp = mp.mpf(k)
+            return (z_mp ** kmp) / mp.gamma(alpha_mp * kmp + 1)
+        val = mpmath.nsum(term, [0, mp.inf])
+        return float(val)
+    except Exception:
+        pass
 
-def spectral_series_pdf(x_grid, t, x0, alpha, N, omega2_over_eta=1.0):
+
+def spectral_series_pdf(x_grid, t, x0, alpha, N, omega2_over_eta=1.0, K_beta=1.0):
     """Compute spectral series approximation (Eq.18-like) for fractional OU.
 
     Uses eigenfunctions (Hermite functions) and Mittag-Leffler temporal factor
@@ -210,6 +192,7 @@ def spectral_series_pdf(x_grid, t, x0, alpha, N, omega2_over_eta=1.0):
 
     for n in range(1, N-1):
         nn = n
+        #print(f"Computing term for n={nn}...")
         coef1 = math.sqrt(2.0 / (nn + 1.0))
         coef2 = math.sqrt(nn / (nn + 1.0))
         psi_next_x = coef1 * x * psi_curr_x - coef2 * psi_prev_x
@@ -223,16 +206,19 @@ def spectral_series_pdf(x_grid, t, x0, alpha, N, omega2_over_eta=1.0):
 
         psi_prev_x, psi_curr_x = psi_curr_x, psi_next_x
         psi_prev_x0, psi_curr_x0 = psi_curr_x0, psi_next_x0
-
+    
     series[series < 0] = 0.0
     return series
 
 
+
+
+
 def main():
-    """Generate Figure 6 plots for α=1/2 (Smirnov) and α=1/3."""
+    """Generate Figure 6 plots for α=1/2 (Smirnov) and α=1/3 and compare them with α=0."""
     
     print("="*70)
-    print("Figure 6: Fractional OU Process (normalized Lévy densities)")
+    print("Figure 6: Fractional OU Process (normalized Lévy densities) and Comparison with Non-Fractional Case")
     print("="*70)
     
     alphas = [0.5, 1.0/3.0]
@@ -241,18 +227,18 @@ def main():
     x0 = 0.5
     times = [0.01, 0.1, 1.0, 10.0, 100.0]
     x_values = np.linspace(-3.0, 3.0, 300)
-    colors = ['C0', 'C1', 'C2', 'C3', 'C4']
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
 
-    # --- Main figure: separate plots for each α ---
+    # ========== Main figures for each alpha ==========
     for alpha in alphas:
-        fig = plt.figure(figsize=(12, 7))
+        fig = plt.figure(figsize=(14, 8))
         ax_main = fig.add_subplot(1, 1, 1)
         print(f"Generating figure for alpha={alpha:.3f}...")
         
         for t, c in zip(times, colors):
             print(f"  Computing pdf for t={t}...")
             pdf = compute_pdf_vectorized(x_values, t, x0, alpha=alpha, gamma=gamma, K_beta=K_beta, Ns=800)
-            ax_main.plot(x_values, pdf, color=c, lw=3, label=f't = {t}')
+            ax_main.plot(x_values, pdf, color=c, lw=2.5, label=f't = {t}', alpha=0.85)
             
             # Print PDF values
             idx0 = int(np.argmin(np.abs(x_values - 0.0)))
@@ -262,61 +248,71 @@ def main():
         # Stationary distribution and x0 marker
         variance_stat = K_beta / gamma
         stationary = 1.0 / np.sqrt(2.0 * np.pi * variance_stat) * np.exp(-0.5 * gamma * x_values**2 / K_beta)
-        ax_main.plot(x_values, stationary, color='k', linestyle=':', lw=2, label='Stationary')
-        ax_main.axvline(x=x0, color='0.5', linestyle=':', label=f'x0 = {x0}')
+        ax_main.plot(x_values, stationary, color='black', linestyle='--', lw=2.2, label='Stationary', alpha=0.7)
+        ax_main.axvline(x=x0, color='gray', linestyle=':', linewidth=2, alpha=0.6, label=f'x₀ = {x0}')
 
-        ax_main.set_xlabel('x')
-        ax_main.set_ylabel('P(x,t)')
+        ax_main.set_xlabel('x', fontsize=14, fontweight='bold')
+        ax_main.set_ylabel('P(x,t)', fontsize=14, fontweight='bold')
         
         # Title with α as fraction
         if abs(alpha - 0.5) < 1e-12:
-            title_alpha = r'α = 1/2'
+            title_alpha = r'α = 1/2 (Smirnov)'
         elif abs(alpha - 1.0/3.0) < 1e-12:
             title_alpha = r'α = 1/3'
         else:
             title_alpha = f'α = {alpha}'
         
-        ax_main.set_title(f'Figure ({title_alpha})')
-        ax_main.grid(True, alpha=0.35)
+        ax_main.set_title(f'Fractional OU Process: {title_alpha}', fontsize=16, fontweight='bold', pad=20)
+        ax_main.grid(True, alpha=0.35, linestyle='--', linewidth=0.7)
         ax_main.set_ylim(bottom=0)
-        lg = ax_main.legend(title='Times', fontsize=12, loc='upper right')
-        lg.get_frame().set_alpha(0.9)
+        
+        lg = ax_main.legend(title='Times', fontsize=11, title_fontsize=12, loc='upper right', 
+                           framealpha=0.95, edgecolor='gray')
+        lg.get_frame().set_linewidth(1.5)
 
         plt.tight_layout()
         fname = f'fig6_alpha_{alpha:.3f}.png'.replace('0.', '').replace('.', '_')
-        fig.savefig(fname, dpi=300, bbox_inches='tight')
+        fig.savefig(fname, dpi=300, bbox_inches='tight', facecolor='white')
         print(f'  Saved {fname}\n')
         plt.close(fig)
 
-    # --- Comparison panels: α=1/2 vs α=1/3 ---
+    # ========== Comparison panels for α=1/2 vs α=1/3 ==========
+    print('Generating comparison panels: α = 1/2 vs α = 1/3')
     panel_times = [0.02, 0.2, 20.0, 200.0]
     x_panel = np.linspace(-0.5, 1.5, 600)
-    fig, axes = plt.subplots(2, 2, figsize=(12, 8), sharey=True)
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10), sharey=True)
     axes = axes.flatten()
     
     for ax, t in zip(axes, panel_times):
         p_half = compute_pdf_vectorized(x_panel, t, x0, alpha=0.5, gamma=gamma, K_beta=K_beta, Ns=800)
         p_third = compute_pdf_vectorized(x_panel, t, x0, alpha=1.0/3.0, gamma=gamma, K_beta=K_beta, Ns=800)
-        ax.plot(x_panel, p_half, color='C0', linestyle='-', lw=3, label=r'$\alpha=1/2$')
-        ax.plot(x_panel, p_third, color='C0', linestyle='--', lw=3, label=r'$\alpha=1/3$')
-        ax.set_title(f't = {t}', fontsize=16)
-        ax.set_xlabel('x', fontsize=14)
-        ax.grid(True, alpha=0.25)
+        
+        ax.plot(x_panel, p_half, color='#1f77b4', linestyle='-', lw=2.5, label=r'α = 1/2', alpha=0.85)
+        ax.plot(x_panel, p_third, color='#ff7f0e', linestyle='--', lw=2.5, label=r'α = 1/3', alpha=0.85)
+        
+        ax.set_title(f't = {t}', fontsize=14, fontweight='bold', pad=12)
+        ax.set_xlabel('x', fontsize=12)
+        ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.7)
+        ax.set_ylim(bottom=0)
         
         diff = p_third - p_half
         L1 = np.trapezoid(np.abs(diff), x_panel)
-        ax.text(0.02, 0.92, f'L1 = {L1:.2e}', transform=ax.transAxes,
-                verticalalignment='top', fontsize=12, bbox=dict(facecolor='white', alpha=0.8))
-        ax.legend(loc='upper right', fontsize=10)
+        ax.text(0.65, 0.95, f'L¹ = {L1:.2e}', transform=ax.transAxes,
+                verticalalignment='top', fontsize=11, 
+                bbox=dict(boxstyle='round,pad=0.6', facecolor='white', alpha=0.85, edgecolor='gray'))
+        
+        ax.legend(loc='upper right', fontsize=11, framealpha=0.95, edgecolor='gray')
     
-    axes[0].set_ylabel('P(x,t)', fontsize=14)
-    plt.suptitle('Comparison panels: α = 1/2 vs α = 1/3', fontsize=20)
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    fig.savefig('fig6_comparison_panels.png', dpi=300, bbox_inches='tight')
+    axes[0].set_ylabel('P(x,t)', fontsize=12, fontweight='bold')
+    axes[2].set_ylabel('P(x,t)', fontsize=12, fontweight='bold')
+    
+    plt.suptitle('Comparison: α = 1/2 vs α = 1/3', fontsize=16, fontweight='bold', y=0.995)
+    plt.tight_layout()
+    fig.savefig('fig6_comparison_panels.png', dpi=300, bbox_inches='tight', facecolor='white')
     print('Saved fig6_comparison_panels.png\n')
     plt.close(fig)
 
-    # --- Spectral series vs integral solution (α=1/3) ---
+    # ========== Spectral series vs integral solution (α=1/3) ==========
     print('Spectral series comparison (α = 1/3) vs integral map solution')
     alpha_spec = 1.0/3.0
     times_spec = times
@@ -325,35 +321,103 @@ def main():
     n_cols = len(Ns_list)
     x_spec = np.linspace(-0.5, 1.5, 400)
 
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4*n_cols, 2.5*n_rows), sharex=True, sharey=True)
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(16, 12), sharex=True, sharey=True)
     
     for i, t in enumerate(times_spec):
         ref = compute_pdf_vectorized(x_spec, t, x0, alpha=alpha_spec, gamma=gamma, K_beta=K_beta, Ns=800)
         for j, N in enumerate(Ns_list):
             ax = axes[i, j] if n_rows > 1 else axes[j]
             print(f'  time={t}, N={N}: computing spectral series')
-            spec = spectral_series_pdf(x_spec, t, x0, alpha_spec, N, omega2_over_eta=1.0)
+            spec = spectral_series_pdf(x_spec, t, x0, alpha_spec, N, omega2_over_eta=gamma)
             
-            ax.plot(x_spec, ref, color='k', lw=2.5, label='integral')
-            ax.plot(x_spec, spec, color='C1', lw=2, linestyle='--', label=f'series N={N}')
+            ax.plot(x_spec, ref, color='black', lw=2.5, label='integral', alpha=0.8)
+            ax.plot(x_spec, spec, color='#d62728', lw=2, linestyle='--', label=f'N={N}', alpha=0.8)
             
             L1 = np.trapezoid(np.abs(spec - ref), x_spec)
-            ax.text(0.02, 0.92, f'L1={L1:.2e}', transform=ax.transAxes, fontsize=10,
-                    bbox=dict(facecolor='white', alpha=0.8))
+            ax.text(0.65, 0.95, f'L¹={L1:.2e}', transform=ax.transAxes, fontsize=10,
+                    bbox=dict(boxstyle='round,pad=0.5', facecolor='white', alpha=0.85, edgecolor='gray'))
+            
+            ax.grid(True, alpha=0.3, linestyle='--', linewidth=0.7)
+            ax.set_ylim(bottom=0)
             
             if i == 0:
-                ax.set_title(f'N={N}', fontsize=14)
+                ax.set_title(f'N = {N}', fontsize=13, fontweight='bold', pad=10)
             if j == 0:
-                ax.set_ylabel(f't={t}', fontsize=12)
-            ax.grid(True, alpha=0.25)
+                ax.set_ylabel(f't = {t}', fontsize=12, fontweight='bold')
     
-    plt.suptitle('Spectral series (Eq.18) vs integral map — α = 1/3', fontsize=18)
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    fig.savefig('fig6_spectral_vs_integral.png', dpi=300, bbox_inches='tight')
-    print('Saved fig6_spectral_vs_integral.png')
+    fig.text(0.5, 0.02, 'x', ha='center', fontsize=13, fontweight='bold')
+    fig.text(0.02, 0.5, 'P(x,t)', va='center', rotation='vertical', fontsize=13, fontweight='bold')
+    
+    plt.suptitle('Spectral Series (Eq.18) vs Integral Map – α = 1/3', fontsize=16, fontweight='bold', y=0.995)
+    plt.tight_layout(rect=[0.03, 0.03, 1, 0.99])
+    fig.savefig('fig6_spectral_vs_integral.png', dpi=300, bbox_inches='tight', facecolor='white')
+    print('Saved fig6_spectral_vs_integral.png\n')
     plt.close(fig)
 
+    # ========== Comparison between fractional and non-fractional cases ==========
+    print('Generating comparison: Fractional vs Non-Fractional cases')
+    comparison_alphas = [0.5, 1.0/3.0, 0.0]
+    comparison_times = [0.01, 0.1, 1.0, 10.0]
+    comparison_x = np.linspace(-1.0, 2.0, 400)
+    
+    fig, axes = plt.subplots(2, 2, figsize=(16, 10), sharey=True)
+    axes = axes.flatten()
+    
+    colors_comp = ['#1f77b4', '#ff7f0e', '#2ca02c']
+    line_styles = ['-', '--', ':']
+    
+    for i, t in enumerate(comparison_times):
+        for alpha_idx, alpha in enumerate(comparison_alphas):
+            if abs(alpha - 0.0) < 1e-12:
+                # Non-fractional case (α=0)
+                mean = x0 * np.exp(-gamma * t)
+                variance = (K_beta / gamma) * (1.0 - np.exp(-2.0 * gamma * t))
+                nf_pdf = (1.0 / np.sqrt(2.0 * np.pi * variance) * 
+                         np.exp(-0.5 * (comparison_x - mean)**2 / variance))
+                axes[i].plot(comparison_x, nf_pdf, 
+                            color=colors_comp[alpha_idx], 
+                            linestyle=line_styles[alpha_idx],
+                            linewidth=2.5,
+                            alpha=0.85,
+                            label='α = 0 (Standard)')
+            else:
+                # Fractional cases
+                frac_pdf = compute_pdf_vectorized(comparison_x, t, x0, 
+                                                 alpha=alpha, 
+                                                 gamma=gamma, 
+                                                 K_beta=K_beta, 
+                                                 Ns=800)
+                
+                alpha_str = '1/2' if abs(alpha - 0.5) < 1e-12 else '1/3'
+                alpha_label = f'α = {alpha_str}'
+                
+                axes[i].plot(comparison_x, frac_pdf, 
+                            color=colors_comp[alpha_idx], 
+                            linestyle=line_styles[alpha_idx],
+                            linewidth=2.5,
+                            alpha=0.85,
+                            label=alpha_label)
 
+        axes[i].set_title(f't = {t}', fontsize=14, fontweight='bold', pad=12)
+        axes[i].set_xlabel('x', fontsize=12)
+        axes[i].grid(True, alpha=0.3, linestyle='--', linewidth=0.7)
+        axes[i].set_ylim(bottom=0)
+        
+        if i == 0 or i == 2:
+            axes[i].set_ylabel('P(x,t)', fontsize=12, fontweight='bold')
+        
+        axes[i].legend(loc='upper right', fontsize=11, framealpha=0.95, edgecolor='gray')
+    
+    plt.suptitle('Comparison: Fractional (α ≠ 0) vs Non-Fractional (α = 0) Cases', 
+                 fontsize=16, fontweight='bold', y=0.995)
+    plt.tight_layout()
+    fig.savefig('fig6_fractional_vs_nonfractional.png', dpi=300, bbox_inches='tight', facecolor='white')
+    print('Saved fig6_fractional_vs_nonfractional.png\n')
+    plt.close(fig)
+    
+    print("="*70)
+    print("All figures generated successfully!")
+    print("="*70)
 
 if __name__ == '__main__':
     main()
