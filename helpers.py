@@ -218,8 +218,61 @@ def generate_comparison_panels(panel_times, x0, gamma, K_beta, use_cache=True):
     )
     plt.close(fig)
 
-def generate_spectral_comparison_plot(alpha_spec, times_spec, Ns_list, n_repeats, x0, gamma, K_beta, m, omega, k_B, T, num_cores, use_cache=True):
-    """Generates the spectral series vs integral map comparison plot for a given alpha."""
+def _load_or_compute_spectral_data(cache_filename, title_alpha_str, tasks, num_cores, use_cache):
+    """Helper to abstract away data loading and computation for spectral plots."""
+    if use_cache and os.path.exists(cache_filename):
+        print(f"Loading data from cache: {cache_filename}")
+        with open(cache_filename, 'rb') as f:
+            return pickle.load(f)
+
+    print(f"Computing data for spectral comparison ({title_alpha_str})...")
+    pool = multiprocessing.Pool(processes=num_cores)
+    results = []
+    total_steps = len(tasks)
+    print_progress(0, total_steps, prefix=f'Progress ({title_alpha_str}):', suffix='Complete', length=50)
+    for i, result in enumerate(pool.imap_unordered(compute_spec_and_time, tasks)):
+        results.append(result)
+        print_progress(i + 1, total_steps, prefix=f'Progress ({title_alpha_str}):', suffix='Complete', length=50)
+    pool.close()
+    pool.join()
+
+    timings = {}
+    specs = {}
+    for t, N, timing, spec_result in results:
+        if (t, N) not in timings:
+            timings[(t, N)] = []
+        timings[(t, N)].append(timing)
+        specs[(t, N)] = spec_result
+    
+    os.makedirs(os.path.dirname(cache_filename), exist_ok=True)
+    with open(cache_filename, 'wb') as f:
+        pickle.dump((timings, specs), f)
+    
+    return timings, specs
+
+def _plot_spectral_subplot(ax, x_spec, ref_pdf, spec_pdf, N, timings_for_N, t):
+    """Helper to plot a single panel in the spectral comparison figure."""
+    avg_time = np.mean(timings_for_N)
+    std_time = np.std(timings_for_N)
+
+    ax.plot(x_spec, ref_pdf, color="black", lw=2.5, label="integral", alpha=0.8)
+    ax.plot(x_spec, spec_pdf, color="#d62728", lw=2, linestyle="--", label=f"N={N}", alpha=0.8)
+
+    L1 = np.trapezoid(np.abs(spec_pdf - ref_pdf), x_spec)
+    bbox_props = dict(boxstyle="round,pad=0.5", facecolor="white", alpha=0.85, edgecolor="gray")
+    
+    ax.text(0.95, 0.95, f"L¹={L1:.2e}", transform=ax.transAxes, fontsize=10,
+            verticalalignment='top', horizontalalignment='right', bbox=bbox_props)
+
+    ax.text(0.05, 0.95, f"Time: {avg_time:.3f} ± {std_time:.3f} s", transform=ax.transAxes,
+            fontsize=8, verticalalignment='top', bbox=bbox_props)
+
+    ax.grid(True, alpha=0.3, linestyle="--", linewidth=0.7)
+    ax.set_ylim(bottom=0)
+
+
+def _get_alpha_strings(alpha_spec):
+    """Helper to get alpha strings for titles and filenames."""
     if abs(alpha_spec - 0.5) < 1e-12:
         title_alpha_str = "α = 1/2 (Smirnov)"
         fname_alpha_str = "alpha_0_5"
@@ -229,105 +282,32 @@ def generate_spectral_comparison_plot(alpha_spec, times_spec, Ns_list, n_repeats
     else:
         title_alpha_str = f"α = {alpha_spec}"
         fname_alpha_str = f"alpha_{alpha_spec:.3f}".replace(".", "_")
+    return title_alpha_str, fname_alpha_str
+
+def generate_spectral_comparison_plot(
+    alpha_spec, times_spec, Ns_list, n_repeats, x0, gamma, K_beta, m, omega, k_B, T, num_cores, use_cache=True
+):
+    """Generates the spectral series vs integral map comparison plot for a given alpha."""
+    title_alpha_str, fname_alpha_str = _get_alpha_strings(alpha_spec)
 
     print(f"\nGenerating spectral series comparison for {title_alpha_str}...")
     x_spec = np.linspace(-0.5, 1.5, 400)
     cache_dir = "data"
     cache_filename = os.path.join(cache_dir, f"spectral_comparison_data_{fname_alpha_str}.pkl")
-    
-    if use_cache and os.path.exists(cache_filename):
-        print(f"Loading data from cache: {cache_filename}")
-        with open(cache_filename, 'rb') as f:
-            timings, specs = pickle.load(f)
-    else:
-        print(f"Computing data for spectral comparison ({title_alpha_str})...")
-        tasks = []
-        for t in times_spec:
-            for N in Ns_list:
-                for _ in range(n_repeats):
-                    tasks.append((t, N, x_spec, x0, alpha_spec, m, omega, k_B, T, gamma))
 
-        pool = multiprocessing.Pool(processes=num_cores)
-        results = []
-        total_steps = len(tasks)
-        print_progress(0, total_steps, prefix=f'Progress ({title_alpha_str}):', suffix='Complete', length=50)
-        for i, result in enumerate(pool.imap_unordered(compute_spec_and_time, tasks)):
-            results.append(result)
-            print_progress(i + 1, total_steps, prefix=f'Progress ({title_alpha_str}):', suffix='Complete', length=50)
-        pool.close()
-        pool.join()
-
-        timings = {}
-        specs = {}
-        for t, N, timing, spec_result in results:
-            if (t, N) not in timings:
-                timings[(t, N)] = []
-            timings[(t, N)].append(timing)
-            specs[(t, N)] = spec_result
-        os.makedirs(cache_dir, exist_ok=True)
-        with open(cache_filename, 'wb') as f:
-            pickle.dump((timings, specs), f)
+    tasks = [(t, N, x_spec, x0, alpha_spec, m, omega, k_B, T, gamma)
+             for t in times_spec for N in Ns_list for _ in range(n_repeats)]
+    timings, specs = _load_or_compute_spectral_data(cache_filename, title_alpha_str, tasks, num_cores, use_cache)
 
     n_rows = len(times_spec)
     n_cols = len(Ns_list)
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(16, 12), sharex=True, sharey=True)
 
     for i, t in enumerate(times_spec):
-        ref = compute_pdf_vectorized(
-            x_spec, t, x0, alpha=alpha_spec, gamma=gamma, K_beta=K_beta, Ns=800
-        )
+        ref_pdf = compute_pdf_vectorized(x_spec, t, x0, alpha=alpha_spec, gamma=gamma, K_beta=K_beta, Ns=800)
         for j, N in enumerate(Ns_list):
-            ax = axes[i, j] if n_rows > 1 else axes[j]
-            
-            avg_time = np.mean(timings[(t,N)])
-            std_time = np.std(timings[(t,N)])
-            spec = specs[(t,N)]
-
-            ax.plot(x_spec, ref, color="black", lw=2.5, label="integral", alpha=0.8)
-            ax.plot(
-                x_spec,
-                spec,
-                color="#d62728",
-                lw=2,
-                linestyle="--",
-                label=f"N={N}",
-                alpha=0.8,
-            )
-
-            L1 = np.trapezoid(np.abs(spec - ref), x_spec)
-            ax.text(
-                0.95,
-                0.95,
-                f"L¹={L1:.2e}",
-                transform=ax.transAxes,
-                fontsize=10,
-                verticalalignment='top',
-                horizontalalignment='right',
-                bbox=dict(
-                    boxstyle="round,pad=0.5",
-                    facecolor="white",
-                    alpha=0.85,
-                    edgecolor="gray",
-                ),
-            )
-
-            ax.text(
-                0.05,
-                0.95,
-                f"Time: {avg_time:.3f} ± {std_time:.3f} s",
-                transform=ax.transAxes,
-                fontsize=8,
-                verticalalignment='top',
-                bbox=dict(
-                    boxstyle="round,pad=0.5",
-                    facecolor="white",
-                    alpha=0.85,
-                    edgecolor="gray",
-                ),
-            )
-
-            ax.grid(True, alpha=0.3, linestyle="--", linewidth=0.7)
-            ax.set_ylim(bottom=0)
+            ax = axes[i, j] if n_rows > 1 and n_cols > 1 else (axes[j] if n_cols > 1 else axes[i])
+            _plot_spectral_subplot(ax, x_spec, ref_pdf, specs[(t, N)], N, timings[(t, N)], t)
 
             if i == 0:
                 ax.set_title(
@@ -361,6 +341,55 @@ def generate_spectral_comparison_plot(alpha_spec, times_spec, Ns_list, n_repeats
     )
     plt.close(fig)
 
+def _load_or_compute_timing_data(cache_filename, times_spec, Ns_list_timing, n_repeats, x_spec, x0, alpha_spec, m, omega, k_B, T, gamma, num_cores, use_cache):
+    """Helper to load or compute timing data."""
+    if use_cache and os.path.exists(cache_filename):
+        print(f"Loading data from cache: {cache_filename}")
+        with open(cache_filename, 'rb') as f:
+            return pickle.load(f)
+
+    print("Computing data for timing plot...")
+    tasks = [(t, N, x_spec, x0, alpha_spec, m, omega, k_B, T, gamma)
+             for t in times_spec for N in Ns_list_timing for _ in range(n_repeats)]
+
+    pool = multiprocessing.Pool(processes=num_cores)
+    results = []
+    total_steps = len(tasks)
+    print_progress(0, total_steps, prefix='Timing Plot Progress:', suffix='Complete', length=50)
+    for i, result in enumerate(pool.imap_unordered(compute_spec_and_time, tasks)):
+        results.append(result)
+        print_progress(i + 1, total_steps, prefix='Timing Plot Progress:', suffix='Complete', length=50)
+    pool.close()
+    pool.join()
+
+    os.makedirs(os.path.dirname(cache_filename), exist_ok=True)
+    with open(cache_filename, 'wb') as f:
+        pickle.dump(results, f)
+    return results
+
+def _plot_timing_data(timings, times_spec, Ns_list_timing):
+    """Helper to plot timing data."""
+    fig, ax = plt.subplots(figsize=(10, 7))
+    colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]
+
+    for t, color in zip(times_spec, colors):
+        avg_times = [np.mean(timings.get((t, N), [np.nan])) for N in Ns_list_timing]
+        std_times = [np.std(timings.get((t, N), [np.nan])) for N in Ns_list_timing]
+        ax.errorbar(Ns_list_timing, avg_times, yerr=std_times, label=f"t = {t}", color=color, capsize=3, marker='o')
+
+    ax.set_xlabel("N (Number of terms in spectral series)", fontsize=14, fontweight="bold")
+    ax.set_ylabel("Average Computation Time (s)", fontsize=14, fontweight="bold")
+    ax.set_title("Computation Time vs. N for α = 1/3", fontsize=16, fontweight="bold")
+    ax.grid(True, alpha=0.35, linestyle="--", linewidth=0.7)
+    ax.legend(title="Time (t)")
+    ax.set_yscale('linear')
+    plt.tight_layout()
+
+    figures_dir = "figures"
+    os.makedirs(figures_dir, exist_ok=True)
+    fig.savefig(os.path.join(figures_dir, "fig_timing_vs_N_alpha_1_3.png"), dpi=300, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+
 def generate_timing_plot(num_cores, use_cache=True):
     """Generates the timing vs. N plot for alpha = 1/3."""
     print("\nGenerating timing vs. N plot for α = 1/3...")
@@ -374,30 +403,10 @@ def generate_timing_plot(num_cores, use_cache=True):
     m, omega, k_B, T, gamma = 1.0, 1.0, 1.0, 1.0, 1.0
     x0 = 0.5
 
-    if use_cache and os.path.exists(cache_filename):
-        print(f"Loading data from cache: {cache_filename}")
-        with open(cache_filename, 'rb') as f:
-            results = pickle.load(f)
-    else:
-        print("Computing data for timing plot...")
-        tasks = []
-        for t in times_spec:
-            for N in Ns_list_timing:
-                for _ in range(n_repeats):
-                    tasks.append((t, N, x_spec, x0, alpha_spec, m, omega, k_B, T, gamma))
-
-        pool = multiprocessing.Pool(processes=num_cores)
-        results = []
-        total_steps = len(tasks)
-        print_progress(0, total_steps, prefix='Timing Plot Progress:', suffix='Complete', length=50)
-        for i, result in enumerate(pool.imap_unordered(compute_spec_and_time, tasks)):
-            results.append(result)
-            print_progress(i + 1, total_steps, prefix='Timing Plot Progress:', suffix='Complete', length=50)
-        pool.close()
-        pool.join()
-        os.makedirs(cache_dir, exist_ok=True)
-        with open(cache_filename, 'wb') as f:
-            pickle.dump(results, f)
+    results = _load_or_compute_timing_data(
+        cache_filename, times_spec, Ns_list_timing, n_repeats, x_spec, x0,
+        alpha_spec, m, omega, k_B, T, gamma, num_cores, use_cache
+    )
 
     timings = {}
     for t, N, timing, _ in results:
@@ -405,24 +414,77 @@ def generate_timing_plot(num_cores, use_cache=True):
             timings[(t, N)] = []
         timings[(t, N)].append(timing)
 
-    fig, ax = plt.subplots(figsize=(10, 7))
-    colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]
+    _plot_timing_data(timings, times_spec, Ns_list_timing)
 
-    for t, color in zip(times_spec, colors):
-        avg_times = [np.mean(timings[(t, N)]) for N in Ns_list_timing]
-        std_times = [np.std(timings[(t, N)]) for N in Ns_list_timing]
-        ax.errorbar(Ns_list_timing, avg_times, yerr=std_times, label=f"t = {t}", color=color, capsize=3, marker='o')
+def _load_or_compute_frac_vs_nonfrac_data(cache_filename, comparison_times, comparison_alphas, comparison_x, x0, gamma, K_beta, use_cache):
+    """Helper to load or compute fractional vs non-fractional data."""
+    if use_cache and os.path.exists(cache_filename):
+        print(f"Loading data from cache: {cache_filename}")
+        with open(cache_filename, 'rb') as f:
+            return pickle.load(f)
 
-    ax.set_xlabel("N (Number of terms in spectral series)", fontsize=14, fontweight="bold")
-    ax.set_ylabel("Average Computation Time (s)", fontsize=14, fontweight="bold")
-    ax.set_title("Computation Time vs. N for α = 1/3", fontsize=16, fontweight="bold")
-    ax.grid(True, alpha=0.35, linestyle="--", linewidth=0.7)
-    ax.legend(title="Time (t)")
-    ax.set_yscale('log')
+    print("Computing data for fractional vs non-fractional plot...")
+    plot_data = {}
+    for t in comparison_times:
+        pdfs = {}
+        for alpha in comparison_alphas:
+            if abs(alpha - 0.0) > 1e-12:
+                pdfs[alpha] = compute_pdf_vectorized(
+                    comparison_x, t, x0, alpha=alpha, gamma=gamma, K_beta=K_beta, Ns=800
+                )
+        plot_data[t] = pdfs
+    
+    os.makedirs(os.path.dirname(cache_filename), exist_ok=True)
+    with open(cache_filename, 'wb') as f:
+        pickle.dump(plot_data, f)
+    return plot_data
+
+def _plot_frac_vs_nonfrac_data(plot_data, comparison_times, comparison_alphas, comparison_x, x0, gamma, K_beta):
+    """Helper to plot fractional vs non-fractional data."""
+    fig, axes = plt.subplots(2, 2, figsize=(16, 10), sharey=True)
+    axes = axes.flatten()
+
+    colors_comp = ["#1f77b4", "#ff7f0e", "#2ca02c"]
+    line_styles = ["-", "--", ":"]
+
+    for i, t in enumerate(comparison_times):
+        ax = axes[i]
+        for alpha_idx, alpha in enumerate(comparison_alphas):
+            if abs(alpha - 0.0) < 1e-12:
+                mean = x0 * np.exp(-gamma * t)
+                variance = (K_beta / gamma) * (1.0 - np.exp(-2.0 * gamma * t))
+                nf_pdf = (1.0 / np.sqrt(2.0 * np.pi * variance)) * np.exp(-0.5 * (comparison_x - mean) ** 2 / variance)
+                label = "α = 0 (Standard)"
+                pdf_to_plot = nf_pdf
+            else:
+                alpha_str = "1/2" if abs(alpha - 0.5) < 1e-12 else "1/3"
+                label = f"α = {alpha_str}"
+                pdf_to_plot = plot_data[t][alpha]
+
+            ax.plot(
+                comparison_x, pdf_to_plot, color=colors_comp[alpha_idx], linestyle=line_styles[alpha_idx],
+                linewidth=2.5, alpha=0.85, label=label
+            )
+
+        ax.set_title(f"t = {t}", fontsize=14, fontweight="bold", pad=12)
+        ax.set_xlabel("x", fontsize=12)
+        ax.grid(True, alpha=0.3, linestyle="--", linewidth=0.7)
+        ax.set_ylim(bottom=0)
+        if i % 2 == 0:
+            ax.set_ylabel("P(x,t)", fontsize=12, fontweight="bold")
+        ax.legend(loc="upper right", fontsize=11, framealpha=0.95, edgecolor="gray")
+
+    plt.suptitle(
+        "Comparison: Fractional (α ≠ 0) vs Non-Fractional (α = 0) Cases",
+        fontsize=16, fontweight="bold", y=0.995
+    )
     plt.tight_layout()
     figures_dir = "figures"
     os.makedirs(figures_dir, exist_ok=True)
-    fig.savefig(os.path.join(figures_dir, "fig_timing_vs_N_alpha_1_3.png"), dpi=300, bbox_inches="tight", facecolor="white")
+    fig.savefig(
+        os.path.join(figures_dir, "fig6_fractional_vs_nonfractional.png"),
+        dpi=300, bbox_inches="tight", facecolor="white"
+    )
     plt.close(fig)
 
 def generate_fractional_vs_nonfractional_plot(comparison_alphas, comparison_times, x0, gamma, K_beta, use_cache=True):
@@ -431,89 +493,8 @@ def generate_fractional_vs_nonfractional_plot(comparison_alphas, comparison_time
     cache_dir = "data"
     cache_filename = os.path.join(cache_dir, "frac_vs_nonfrac_data.pkl")
     
-    if use_cache and os.path.exists(cache_filename):
-        print(f"Loading data from cache: {cache_filename}")
-        with open(cache_filename, 'rb') as f:
-            plot_data = pickle.load(f)
-    else:
-        print("Computing data for fractional vs non-fractional plot...")
-        plot_data = {}
-        for t in comparison_times:
-            pdfs = {}
-            for alpha in comparison_alphas:
-                if abs(alpha - 0.0) > 1e-12:
-                    pdfs[alpha] = compute_pdf_vectorized(
-                        comparison_x, t, x0, alpha=alpha, gamma=gamma, K_beta=K_beta, Ns=800
-                    )
-            plot_data[t] = pdfs
-        os.makedirs(cache_dir, exist_ok=True)
-        with open(cache_filename, 'wb') as f:
-            pickle.dump(plot_data, f)
-            
-    fig, axes = plt.subplots(2, 2, figsize=(16, 10), sharey=True)
-    axes = axes.flatten()
-
-    colors_comp = ["#1f77b4", "#ff7f0e", "#2ca02c"]
-    line_styles = ["-", "--", ":"]
-
-    for i, t in enumerate(comparison_times):
-        for alpha_idx, alpha in enumerate(comparison_alphas):
-            if abs(alpha - 0.0) < 1e-12:
-                mean = x0 * np.exp(-gamma * t)
-                variance = (K_beta / gamma) * (1.0 - np.exp(-2.0 * gamma * t))
-                nf_pdf = (
-                    1.0
-                    / np.sqrt(2.0 * np.pi * variance)
-                    * np.exp(-0.5 * (comparison_x - mean) ** 2 / variance)
-                )
-                axes[i].plot(
-                    comparison_x,
-                    nf_pdf,
-                    color=colors_comp[alpha_idx],
-                    linestyle=line_styles[alpha_idx],
-                    linewidth=2.5,
-                    alpha=0.85,
-                    label="α = 0 (Standard)",
-                )
-            else:
-                alpha_str = "1/2" if abs(alpha - 0.5) < 1e-12 else "1/3"
-                alpha_label = f"α = {alpha_str}"
-
-                axes[i].plot(
-                    comparison_x,
-                    plot_data[t][alpha],
-                    color=colors_comp[alpha_idx],
-                    linestyle=line_styles[alpha_idx],
-                    linewidth=2.5,
-                    alpha=0.85,
-                    label=alpha_label,
-                )
-
-        axes[i].set_title(f"t = {t}", fontsize=14, fontweight="bold", pad=12)
-        axes[i].set_xlabel("x", fontsize=12)
-        axes[i].grid(True, alpha=0.3, linestyle="--", linewidth=0.7)
-        axes[i].set_ylim(bottom=0)
-
-        if i == 0 or i == 2:
-            axes[i].set_ylabel("P(x,t)", fontsize=12, fontweight="bold")
-
-        axes[i].legend(
-            loc="upper right", fontsize=11, framealpha=0.95, edgecolor="gray"
-        )
-
-    plt.suptitle(
-        "Comparison: Fractional (α ≠ 0) vs Non-Fractional (α = 0) Cases",
-        fontsize=16,
-        fontweight="bold",
-        y=0.995,
+    plot_data = _load_or_compute_frac_vs_nonfrac_data(
+        cache_filename, comparison_times, comparison_alphas, comparison_x, x0, gamma, K_beta, use_cache
     )
-    plt.tight_layout()
-    figures_dir = "figures"
-    os.makedirs(figures_dir, exist_ok=True)
-    fig.savefig(
-        os.path.join(figures_dir, "fig6_fractional_vs_nonfractional.png"),
-        dpi=300,
-        bbox_inches="tight",
-        facecolor="white",
-    )
-    plt.close(fig)
+    
+    _plot_frac_vs_nonfrac_data(plot_data, comparison_times, comparison_alphas, comparison_x, x0, gamma, K_beta)
