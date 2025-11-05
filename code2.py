@@ -18,6 +18,7 @@ needed.
 import numpy as np
 import matplotlib.pyplot as plt
 import math
+import time
 from scipy.special import kv, factorial
 from scipy.special import eval_hermite
 
@@ -430,6 +431,9 @@ def main():
     n_cols = len(Ns_list)
     x_spec = np.linspace(-0.5, 1.5, 400)
 
+    # New: For timing
+    n_repeats = 5
+
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(16, 12), sharex=True, sharey=True)
 
     for i, t in enumerate(times_spec):
@@ -439,9 +443,19 @@ def main():
         for j, N in enumerate(Ns_list):
             ax = axes[i, j] if n_rows > 1 else axes[j]
             print(f"  time={t}, N={N}: computing spectral series")
-            spec = spectral_series_pdf(
-                x_spec, t, x0, alpha_spec, N, m, omega, k_B, T, gamma
-            )
+
+            # New: timing loop
+            timings = []
+            for _ in range(n_repeats):
+                start_time = time.perf_counter()
+                spec = spectral_series_pdf(
+                    x_spec, t, x0, alpha_spec, N, m, omega, k_B, T, gamma
+                )
+                end_time = time.perf_counter()
+                timings.append(end_time - start_time)
+            
+            avg_time = np.mean(timings)
+            std_time = np.std(timings)
 
             ax.plot(x_spec, ref, color="black", lw=2.5, label="integral", alpha=0.8)
             ax.plot(
@@ -456,11 +470,29 @@ def main():
 
             L1 = np.trapezoid(np.abs(spec - ref), x_spec)
             ax.text(
-                0.65,
+                0.95,
                 0.95,
                 f"L¹={L1:.2e}",
                 transform=ax.transAxes,
                 fontsize=10,
+                verticalalignment='top',
+                horizontalalignment='right',
+                bbox=dict(
+                    boxstyle="round,pad=0.5",
+                    facecolor="white",
+                    alpha=0.85,
+                    edgecolor="gray",
+                ),
+            )
+
+            # New: Add timing information
+            ax.text(
+                0.05,
+                0.95,
+                f"Time: {avg_time:.3f} ± {std_time:.3f} s",
+                transform=ax.transAxes,
+                fontsize=8,
+                verticalalignment='top',
                 bbox=dict(
                     boxstyle="round,pad=0.5",
                     facecolor="white",
