@@ -1,18 +1,18 @@
-# 1. Start from a lightweight Python 3.14 image
+# 1. Parti da un'immagine Python 3.14 leggera
 FROM python:3.14-slim
 
-# 2. Set the working directory inside the container
+# 2. Imposta la cartella di lavoro all'interno del container
 WORKDIR /app
 
-# 3. Copy ONLY the requirements file
+# 3. Copia SOLO il file dei requisiti
 COPY requirements.txt .
 
-# 4. Install dependencies
-#    (we do this before copying the code for caching)
+# 4. Installa le dipendenze
+#    (lo facciamo prima di copiare il codice per la cache)
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 5. Now copy the rest of your code into the container
+# 5. Ora copia tutto il resto del tuo codice nel container
 COPY . .
 
-# 6. Default command (optional, but good practice)
+# 6. Comando di default (opzionale, ma buona pratica)
 CMD ["python", "code2.py"]
