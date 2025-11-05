@@ -15,4 +15,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # 6. Comando di default (opzionale, ma buona pratica)
-CMD ["python", "code2.py"]
+CMD ["python", "main.py"]
