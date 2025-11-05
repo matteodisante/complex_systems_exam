@@ -9,12 +9,7 @@ on:
 jobs:
   build-and-test:
     # Run on an Ubuntu server that has Docker
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-
+    runs-on: ubuntu-latest
     steps:
       # 1. Download your code (including the Dockerfile)
       - name: Checkout repository
