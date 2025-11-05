@@ -1,26 +1,25 @@
 #!/usr/bin/env python3
 """
-Minimal, self-contained script to reproduce some key figures for the fractional OU,
-(α=1/2 and α=1/3) and compare them with the non-fractional case (α=0).
+Minimal, self-contained script to reproduce some key figures for the
+fractional OU, (α=1/2 and α=1/3) and compare them with the non-fractional
+case (α=0).
 
 Method:
  - Use analytical normalized Smirnov form for the Lévy density l_{1/2}(z).
- - Build an s-grid (log-spaced at small s, log-spaced to large s) and compute
-   n(s,t) on that grid.
+ - Build an s-grid (log-spaced at small s, log-spaced to large s) and
+   compute n(s,t) on that grid.
  - Compute P1(x,s) (OU Gaussian kernel) on a vectorized grid and evaluate
-   P(x,t) = ∫ n(s,t) P1(x,s) ds using a weighted dot product (trapezoidal rule).
+   P(x,t) = ∫ n(s,t) P1(x,s) ds using a weighted dot product
+   (trapezoidal rule).
 
-Lévy densities are already normalized, so no post-normalization of P(x,t) is needed.
-
+Lévy densities are already normalized, so no post-normalization of P(x,t) is
+needed.
 """
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.integrate import quad
 import math
-import time
 from scipy.special import kv, factorial
-from numpy.polynomial.hermite import Hermite
-from scipy.special import eval_hermite, gammaln
+from scipy.special import eval_hermite
 
 # Improve default plotting for slide readability
 plt.rcParams.update(
@@ -97,7 +96,8 @@ def n_function_s_array(s, t, alpha=0.5):
 def ou_kernel(x_grid, s_grid, x0, gamma=1.0, K_beta=1.0):
     """Return P1(x,s) array with shape (len(x_grid), len(s_grid)).
 
-    P1(x,s) = Normal(x; mean = x0 e^{-γ s}, variance = (K_beta/γ)(1 - e^{-2 γ s}))
+    P1(x,s) = Normal(x; mean = x0 e^{-γ s}, 
+    variance = (K_beta/γ)(1 - e^{-2 γ s}))
     """
     x = np.asarray(x_grid)
     s = np.asarray(s_grid)
@@ -180,7 +180,8 @@ def spectral_series_pdf(x_grid, t, x0, alpha, N, m, omega, k_B, T, gamma=1.0):
     using the exact spectral series with non-normalized Hermite polynomials.
 
     Equation (18) from the paper:
-    W = √(mω²/2πk_B T) * Σ_{n=0}^∞ [1/(2^n n!)] * E_alpha(-lambda_n * t^alpha) * H_n(x̃/√2) * H_n(x̃'/√2) * exp(-x̃²/2)
+    W = √(mω²/2πk_B T) * Σ_{n=0}^∞ [1/(2^n n!)] * E_alpha(-lambda_n * t^alpha) 
+    * H_n(x̃/√2) * H_n(x̃'/√2) * exp(-x̃²/2)
 
     Parameters:
     -----------

@@ -1,6 +1,5 @@
 import unittest
 import numpy as np
-from scipy.integrate import quad
 from code2 import (
     # Functions from code2.py to be tested
     mittag_leffler,
@@ -77,7 +76,9 @@ class TestCode2(unittest.TestCase):
         alpha = 0.5
         N = 10
         m, omega, k_B, T, gamma = 1.0, 1.0, 1.0, 1.0, 1.0
-        pdf = spectral_series_pdf(x_grid, t, x0, alpha, N, m, omega, k_B, T, gamma)
+        pdf = spectral_series_pdf(
+            x_grid, t, x0, alpha, N, m, omega, k_B, T, gamma
+        )
         self.assertEqual(pdf.shape, x_grid.shape)
         self.assertTrue(np.all(pdf >= 0))
 
@@ -90,11 +91,14 @@ class TestCode2(unittest.TestCase):
         N = 20  # Use a reasonable number of terms
         m, omega, k_B, T, gamma = 1.0, 1.0, 1.0, 1.0, 1.0
 
-        pdf = spectral_series_pdf(x_grid, t, x0, alpha, N, m, omega, k_B, T, gamma)
+        pdf = spectral_series_pdf(
+            x_grid, t, x0, alpha, N, m, omega, k_B, T, gamma
+        )
 
         integral_val = np.trapezoid(pdf, x_grid)
         print(
-            f"Numerical normalization for spectral series (N={N}, t={t}): {integral_val}"
+            f"Numerical normalization for spectral series (N={N}, t={t}): "
+            f"{integral_val}"
         )
         self.assertAlmostEqual(integral_val, 1.0, places=3)
 
@@ -112,7 +116,8 @@ class TestCode2(unittest.TestCase):
             x_grid, t_large, x0, alpha, N, m, omega, k_B, T, gamma
         )
 
-        # Calculate the analytical stationary solution (Boltzmann distribution for harmonic potential)
+        # Calculate the analytical stationary solution
+        # (Boltzmann distribution for harmonic potential)
         # V(x) = 0.5 * m * omega^2 * x^2
         # P_st(x) = Z * exp(-V(x)/(k_B T))
         # With m=1, omega=1, k_B=1, T=1, this is (1/sqrt(2*pi)) * exp(-x^2/2)
@@ -142,14 +147,15 @@ class TestCode2(unittest.TestCase):
         mean_ou = x0 * np.exp(-gamma * t)
         # Variance for standard OU is (K_beta/gamma) * (1 - exp(-2*gamma*t))
         variance_ou = (K_beta / gamma) * (1 - np.exp(-2 * gamma * t))
-        pdf_ou_analytical = (1.0 / np.sqrt(2 * np.pi * variance_ou)) * np.exp(
-            -0.5 * (x_grid - mean_ou) ** 2 / variance_ou
-        )
+        pdf_ou_analytical = (
+            1.0 / np.sqrt(2 * np.pi * variance_ou)
+        ) * np.exp(-0.5 * (x_grid - mean_ou) ** 2 / variance_ou)
 
         # 3. Compare the two results
         l1_diff = np.trapezoid(np.abs(pdf_spectral - pdf_ou_analytical), x_grid)
         print(
-            f"L1 difference between spectral (alpha=1) and standard OU at t={t}: {l1_diff}"
+            f"L1 difference between spectral (alpha=1) and standard OU at t={t}: "
+            f"{l1_diff}"
         )
         self.assertLess(l1_diff, 1e-3)  # Set a reasonably strict tolerance
 
