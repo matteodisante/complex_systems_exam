@@ -2,6 +2,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import sys
+import os
+import pickle
 import multiprocessing
 import time
 from core_computations import (
@@ -44,16 +46,32 @@ def compute_spec_and_time(args):
     end_time = time.perf_counter()
     return (t, N, end_time - start_time, spec)
 
-def generate_main_figure(alpha, times, colors, x_values, x0, gamma, K_beta):
+def generate_main_figure(alpha, times, colors, x_values, x0, gamma, K_beta, use_cache=True):
+    cache_dir = "data"
+    fname_alpha_str = f"{alpha:.3f}".replace("0.", "").replace(".", "_")
+    cache_filename = os.path.join(cache_dir, f"main_figure_data_alpha_{fname_alpha_str}.pkl")
+
+    if use_cache and os.path.exists(cache_filename):
+        print(f"Loading data from cache: {cache_filename}")
+        with open(cache_filename, 'rb') as f:
+            pdfs = pickle.load(f)
+    else:
+        print(f"Computing data for alpha={alpha:.3f}...")
+        pdfs = {}
+        for t in times:
+            pdfs[t] = compute_pdf_vectorized(
+                x_values, t, x0, alpha=alpha, gamma=gamma, K_beta=K_beta, Ns=800
+            )
+        os.makedirs(cache_dir, exist_ok=True)
+        with open(cache_filename, 'wb') as f:
+            pickle.dump(pdfs, f)
+
     fig = plt.figure(figsize=(14, 8))
     ax_main = fig.add_subplot(1, 1, 1)
     print(f"\nGenerating figure for alpha={alpha:.3f}...")
 
     for t, c in zip(times, colors):
-        pdf = compute_pdf_vectorized(
-            x_values, t, x0, alpha=alpha, gamma=gamma, K_beta=K_beta, Ns=800
-        )
-        ax_main.plot(x_values, pdf, color=c, lw=2.5, label=f"t = {t}", alpha=0.85)
+        ax_main.plot(x_values, pdfs[t], color=c, lw=2.5, label=f"t = {t}", alpha=0.85)
 
     variance_stat = K_beta / gamma
     stationary = (
@@ -109,27 +127,44 @@ def generate_main_figure(alpha, times, colors, x_values, x0, gamma, K_beta):
     lg.get_frame().set_linewidth(1.5)
 
     plt.tight_layout()
-    fname = f"fig6_alpha_{alpha:.3f}.png".replace("0.", "").replace(".", "_")
+    figures_dir = "figures"
+    os.makedirs(figures_dir, exist_ok=True)
+    fname = os.path.join(figures_dir, f"fig6_alpha_{alpha:.3f}.png".replace("0.", "").replace(".", "_"))
     fig.savefig(fname, dpi=300, bbox_inches="tight", facecolor="white")
     plt.close(fig)
 
-def generate_comparison_panels(panel_times, x0, gamma, K_beta):
+def generate_comparison_panels(panel_times, x0, gamma, K_beta, use_cache=True):
     print("\nGenerating comparison panels: α = 1/2 vs α = 1/3")
     x_panel = np.linspace(-0.5, 1.5, 600)
+    cache_dir = "data"
+    cache_filename = os.path.join(cache_dir, "comparison_panels_data.pkl")
+    
+    if use_cache and os.path.exists(cache_filename):
+        print(f"Loading data from cache: {cache_filename}")
+        with open(cache_filename, 'rb') as f:
+            panel_data = pickle.load(f)
+    else:
+        print("Computing data for comparison panels...")
+        panel_data = {}
+        for t in panel_times:
+            p_half = compute_pdf_vectorized(
+                x_panel, t, x0, alpha=0.5, gamma=gamma, K_beta=K_beta, Ns=800
+            )
+            p_third = compute_pdf_vectorized(
+                x_panel, t, x0, alpha=1.0 / 3.0, gamma=gamma, K_beta=K_beta, Ns=800
+            )
+            panel_data[t] = (p_half, p_third)
+        os.makedirs(cache_dir, exist_ok=True)
+        with open(cache_filename, 'wb') as f:
+            pickle.dump(panel_data, f)
+
     fig, axes = plt.subplots(2, 2, figsize=(14, 10), sharey=True)
     axes = axes.flatten()
 
     for ax, t in zip(axes, panel_times):
-        p_half = compute_pdf_vectorized(
-            x_panel, t, x0, alpha=0.5, gamma=gamma, K_beta=K_beta, Ns=800
-        )
-        p_third = compute_pdf_vectorized(
-            x_panel, t, x0, alpha=1.0 / 3.0, gamma=gamma, K_beta=K_beta, Ns=800
-        )
-
+        p_half, p_third = panel_data[t]
         ax.plot(
-            x_panel,
-            p_half,
+            x_panel, p_half,
             color="#1f77b4",
             linestyle="-",
             lw=2.5,
@@ -137,8 +172,7 @@ def generate_comparison_panels(panel_times, x0, gamma, K_beta):
             alpha=0.85,
         )
         ax.plot(
-            x_panel,
-            p_third,
+            x_panel, p_third,
             color="#ff7f0e",
             linestyle="--",
             lw=2.5,
@@ -177,12 +211,14 @@ def generate_comparison_panels(panel_times, x0, gamma, K_beta):
         "Comparison: α = 1/2 vs α = 1/3", fontsize=16, fontweight="bold", y=0.995
     )
     plt.tight_layout()
+    figures_dir = "figures"
+    os.makedirs(figures_dir, exist_ok=True)
     fig.savefig(
-        "fig6_comparison_panels.png", dpi=300, bbox_inches="tight", facecolor="white"
+        os.path.join(figures_dir, "fig6_comparison_panels.png"), dpi=300, bbox_inches="tight", facecolor="white"
     )
     plt.close(fig)
 
-def generate_spectral_comparison_plot(alpha_spec, times_spec, Ns_list, n_repeats, x0, gamma, K_beta, m, omega, k_B, T, num_cores):
+def generate_spectral_comparison_plot(alpha_spec, times_spec, Ns_list, n_repeats, x0, gamma, K_beta, m, omega, k_B, T, num_cores, use_cache=True):
     """Generates the spectral series vs integral map comparison plot for a given alpha."""
     if abs(alpha_spec - 0.5) < 1e-12:
         title_alpha_str = "α = 1/2 (Smirnov)"
@@ -196,30 +232,41 @@ def generate_spectral_comparison_plot(alpha_spec, times_spec, Ns_list, n_repeats
 
     print(f"\nGenerating spectral series comparison for {title_alpha_str}...")
     x_spec = np.linspace(-0.5, 1.5, 400)
+    cache_dir = "data"
+    cache_filename = os.path.join(cache_dir, f"spectral_comparison_data_{fname_alpha_str}.pkl")
+    
+    if use_cache and os.path.exists(cache_filename):
+        print(f"Loading data from cache: {cache_filename}")
+        with open(cache_filename, 'rb') as f:
+            timings, specs = pickle.load(f)
+    else:
+        print(f"Computing data for spectral comparison ({title_alpha_str})...")
+        tasks = []
+        for t in times_spec:
+            for N in Ns_list:
+                for _ in range(n_repeats):
+                    tasks.append((t, N, x_spec, x0, alpha_spec, m, omega, k_B, T, gamma))
 
-    tasks = []
-    for t in times_spec:
-        for N in Ns_list:
-            for _ in range(n_repeats):
-                tasks.append((t, N, x_spec, x0, alpha_spec, m, omega, k_B, T, gamma))
+        pool = multiprocessing.Pool(processes=num_cores)
+        results = []
+        total_steps = len(tasks)
+        print_progress(0, total_steps, prefix=f'Progress ({title_alpha_str}):', suffix='Complete', length=50)
+        for i, result in enumerate(pool.imap_unordered(compute_spec_and_time, tasks)):
+            results.append(result)
+            print_progress(i + 1, total_steps, prefix=f'Progress ({title_alpha_str}):', suffix='Complete', length=50)
+        pool.close()
+        pool.join()
 
-    pool = multiprocessing.Pool(processes=num_cores)
-    results = []
-    total_steps = len(tasks)
-    print_progress(0, total_steps, prefix=f'Progress ({title_alpha_str}):', suffix='Complete', length=50)
-    for i, result in enumerate(pool.imap_unordered(compute_spec_and_time, tasks)):
-        results.append(result)
-        print_progress(i + 1, total_steps, prefix=f'Progress ({title_alpha_str}):', suffix='Complete', length=50)
-    pool.close()
-    pool.join()
-
-    timings = {}
-    specs = {}
-    for t, N, timing, spec_result in results:
-        if (t, N) not in timings:
-            timings[(t, N)] = []
-        timings[(t, N)].append(timing)
-        specs[(t, N)] = spec_result
+        timings = {}
+        specs = {}
+        for t, N, timing, spec_result in results:
+            if (t, N) not in timings:
+                timings[(t, N)] = []
+            timings[(t, N)].append(timing)
+            specs[(t, N)] = spec_result
+        os.makedirs(cache_dir, exist_ok=True)
+        with open(cache_filename, 'wb') as f:
+            pickle.dump((timings, specs), f)
 
     n_rows = len(times_spec)
     n_cols = len(Ns_list)
@@ -307,15 +354,19 @@ def generate_spectral_comparison_plot(alpha_spec, times_spec, Ns_list, n_repeats
         y=0.995,
     )
     plt.tight_layout(rect=[0.03, 0.03, 1, 0.99])
+    figures_dir = "figures"
+    os.makedirs(figures_dir, exist_ok=True)
     fig.savefig(
-        f"fig6_spectral_vs_integral_{fname_alpha_str}.png", dpi=300, bbox_inches="tight", facecolor="white"
+        os.path.join(figures_dir, f"fig6_spectral_vs_integral_{fname_alpha_str}.png"), dpi=300, bbox_inches="tight", facecolor="white"
     )
     plt.close(fig)
 
-def generate_timing_plot(num_cores):
+def generate_timing_plot(num_cores, use_cache=True):
     """Generates the timing vs. N plot for alpha = 1/3."""
     print("\nGenerating timing vs. N plot for α = 1/3...")
     alpha_spec = 1.0 / 3.0
+    cache_dir = "data"
+    cache_filename = os.path.join(cache_dir, "timing_plot_data_alpha_1_3.pkl")
     times_spec = [0.01, 0.1, 1.0, 10.0, 100.0]
     Ns_list_timing = [5, 10, 20, 40, 60, 80, 100, 120, 140, 160, 180, 200]
     n_repeats = 5
@@ -323,21 +374,30 @@ def generate_timing_plot(num_cores):
     m, omega, k_B, T, gamma = 1.0, 1.0, 1.0, 1.0, 1.0
     x0 = 0.5
 
-    tasks = []
-    for t in times_spec:
-        for N in Ns_list_timing:
-            for _ in range(n_repeats):
-                tasks.append((t, N, x_spec, x0, alpha_spec, m, omega, k_B, T, gamma))
+    if use_cache and os.path.exists(cache_filename):
+        print(f"Loading data from cache: {cache_filename}")
+        with open(cache_filename, 'rb') as f:
+            results = pickle.load(f)
+    else:
+        print("Computing data for timing plot...")
+        tasks = []
+        for t in times_spec:
+            for N in Ns_list_timing:
+                for _ in range(n_repeats):
+                    tasks.append((t, N, x_spec, x0, alpha_spec, m, omega, k_B, T, gamma))
 
-    pool = multiprocessing.Pool(processes=num_cores)
-    results = []
-    total_steps = len(tasks)
-    print_progress(0, total_steps, prefix='Timing Plot Progress:', suffix='Complete', length=50)
-    for i, result in enumerate(pool.imap_unordered(compute_spec_and_time, tasks)):
-        results.append(result)
-        print_progress(i + 1, total_steps, prefix='Timing Plot Progress:', suffix='Complete', length=50)
-    pool.close()
-    pool.join()
+        pool = multiprocessing.Pool(processes=num_cores)
+        results = []
+        total_steps = len(tasks)
+        print_progress(0, total_steps, prefix='Timing Plot Progress:', suffix='Complete', length=50)
+        for i, result in enumerate(pool.imap_unordered(compute_spec_and_time, tasks)):
+            results.append(result)
+            print_progress(i + 1, total_steps, prefix='Timing Plot Progress:', suffix='Complete', length=50)
+        pool.close()
+        pool.join()
+        os.makedirs(cache_dir, exist_ok=True)
+        with open(cache_filename, 'wb') as f:
+            pickle.dump(results, f)
 
     timings = {}
     for t, N, timing, _ in results:
@@ -360,13 +420,36 @@ def generate_timing_plot(num_cores):
     ax.legend(title="Time (t)")
     ax.set_yscale('log')
     plt.tight_layout()
-    fig.savefig("fig_timing_vs_N_alpha_1_3.png", dpi=300, bbox_inches="tight", facecolor="white")
+    figures_dir = "figures"
+    os.makedirs(figures_dir, exist_ok=True)
+    fig.savefig(os.path.join(figures_dir, "fig_timing_vs_N_alpha_1_3.png"), dpi=300, bbox_inches="tight", facecolor="white")
     plt.close(fig)
 
-def generate_fractional_vs_nonfractional_plot(comparison_alphas, comparison_times, x0, gamma, K_beta):
+def generate_fractional_vs_nonfractional_plot(comparison_alphas, comparison_times, x0, gamma, K_beta, use_cache=True):
     print("\nGenerating comparison: Fractional vs Non-Fractional cases")
     comparison_x = np.linspace(-1.0, 2.0, 400)
-
+    cache_dir = "data"
+    cache_filename = os.path.join(cache_dir, "frac_vs_nonfrac_data.pkl")
+    
+    if use_cache and os.path.exists(cache_filename):
+        print(f"Loading data from cache: {cache_filename}")
+        with open(cache_filename, 'rb') as f:
+            plot_data = pickle.load(f)
+    else:
+        print("Computing data for fractional vs non-fractional plot...")
+        plot_data = {}
+        for t in comparison_times:
+            pdfs = {}
+            for alpha in comparison_alphas:
+                if abs(alpha - 0.0) > 1e-12:
+                    pdfs[alpha] = compute_pdf_vectorized(
+                        comparison_x, t, x0, alpha=alpha, gamma=gamma, K_beta=K_beta, Ns=800
+                    )
+            plot_data[t] = pdfs
+        os.makedirs(cache_dir, exist_ok=True)
+        with open(cache_filename, 'wb') as f:
+            pickle.dump(plot_data, f)
+            
     fig, axes = plt.subplots(2, 2, figsize=(16, 10), sharey=True)
     axes = axes.flatten()
 
@@ -393,16 +476,12 @@ def generate_fractional_vs_nonfractional_plot(comparison_alphas, comparison_time
                     label="α = 0 (Standard)",
                 )
             else:
-                frac_pdf = compute_pdf_vectorized(
-                    comparison_x, t, x0, alpha=alpha, gamma=gamma, K_beta=K_beta, Ns=800
-                )
-
                 alpha_str = "1/2" if abs(alpha - 0.5) < 1e-12 else "1/3"
                 alpha_label = f"α = {alpha_str}"
 
                 axes[i].plot(
                     comparison_x,
-                    frac_pdf,
+                    plot_data[t][alpha],
                     color=colors_comp[alpha_idx],
                     linestyle=line_styles[alpha_idx],
                     linewidth=2.5,
@@ -429,8 +508,10 @@ def generate_fractional_vs_nonfractional_plot(comparison_alphas, comparison_time
         y=0.995,
     )
     plt.tight_layout()
+    figures_dir = "figures"
+    os.makedirs(figures_dir, exist_ok=True)
     fig.savefig(
-        "fig6_fractional_vs_nonfractional.png",
+        os.path.join(figures_dir, "fig6_fractional_vs_nonfractional.png"),
         dpi=300,
         bbox_inches="tight",
         facecolor="white",
