@@ -19,6 +19,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 import time
+import sys
+import multiprocessing
 from scipy.special import kv, factorial
 from scipy.special import eval_hermite
 
@@ -36,6 +38,18 @@ plt.rcParams.update(
     }
 )
 
+def print_progress(iteration, total, prefix='', suffix='', decimals=1, length=50, fill='█'):
+    """
+    Call in a loop to create terminal progress bar
+    """
+    percent = ("{:0." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+    filled_length = int(length * iteration // total)
+    bar = fill * filled_length + '-' * (length - filled_length)
+    sys.stdout.write(f'\r{prefix} |{bar}| {percent}% {suffix}')
+    sys.stdout.flush()
+    if iteration == total:
+        sys.stdout.write('\n')
+        sys.stdout.flush()
 
 def l_alpha(alpha, z):
     """Normalized analytic Lévy densities for α=1/2 (Smirnov) and α=1/3.
@@ -250,6 +264,195 @@ def spectral_series_pdf(x_grid, t, x0, alpha, N, m, omega, k_B, T, gamma=1.0):
     pdf[pdf < 0] = 0.0
     return pdf
 
+def compute_spec_and_time(args):
+    t, N, x_spec, x0, alpha_spec, m, omega, k_B, T, gamma = args
+    start_time = time.perf_counter()
+    spec = spectral_series_pdf(
+        x_spec, t, x0, alpha_spec, N, m, omega, k_B, T, gamma
+    )
+    end_time = time.perf_counter()
+    return (t, N, end_time - start_time, spec)
+
+def generate_spectral_comparison_plot(alpha_spec, times_spec, Ns_list, n_repeats, x0, gamma, K_beta, m, omega, k_B, T):
+    """Generates the spectral series vs integral map comparison plot for a given alpha."""
+    if abs(alpha_spec - 0.5) < 1e-12:
+        title_alpha_str = "α = 1/2 (Smirnov)"
+        fname_alpha_str = "alpha_0_5"
+    elif abs(alpha_spec - 1.0 / 3.0) < 1e-12:
+        title_alpha_str = "α = 1/3"
+        fname_alpha_str = "alpha_1_3"
+    else:
+        title_alpha_str = f"α = {alpha_spec}"
+        fname_alpha_str = f"alpha_{alpha_spec:.3f}".replace(".", "_")
+
+    print(f"\nGenerating spectral series comparison for {title_alpha_str}...")
+    x_spec = np.linspace(-0.5, 1.5, 400)
+
+    tasks = []
+    for t in times_spec:
+        for N in Ns_list:
+            for _ in range(n_repeats):
+                tasks.append((t, N, x_spec, x0, alpha_spec, m, omega, k_B, T, gamma))
+
+    pool = multiprocessing.Pool(processes=8)
+    results = []
+    total_steps = len(tasks)
+    print_progress(0, total_steps, prefix=f'Progress ({title_alpha_str}):', suffix='Complete', length=50)
+    for i, result in enumerate(pool.imap_unordered(compute_spec_and_time, tasks)):
+        results.append(result)
+        print_progress(i + 1, total_steps, prefix=f'Progress ({title_alpha_str}):', suffix='Complete', length=50)
+    pool.close()
+    pool.join()
+
+    timings = {}
+    specs = {}
+    for t, N, timing, spec_result in results:
+        if (t, N) not in timings:
+            timings[(t, N)] = []
+        timings[(t, N)].append(timing)
+        specs[(t, N)] = spec_result
+
+    n_rows = len(times_spec)
+    n_cols = len(Ns_list)
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(16, 12), sharex=True, sharey=True)
+
+    for i, t in enumerate(times_spec):
+        ref = compute_pdf_vectorized(
+            x_spec, t, x0, alpha=alpha_spec, gamma=gamma, K_beta=K_beta, Ns=800
+        )
+        for j, N in enumerate(Ns_list):
+            ax = axes[i, j] if n_rows > 1 else axes[j]
+            
+            avg_time = np.mean(timings[(t,N)])
+            std_time = np.std(timings[(t,N)])
+            spec = specs[(t,N)]
+
+            ax.plot(x_spec, ref, color="black", lw=2.5, label="integral", alpha=0.8)
+            ax.plot(
+                x_spec,
+                spec,
+                color="#d62728",
+                lw=2,
+                linestyle="--",
+                label=f"N={N}",
+                alpha=0.8,
+            )
+
+            L1 = np.trapezoid(np.abs(spec - ref), x_spec)
+            ax.text(
+                0.95,
+                0.95,
+                f"L¹={L1:.2e}",
+                transform=ax.transAxes,
+                fontsize=10,
+                verticalalignment='top',
+                horizontalalignment='right',
+                bbox=dict(
+                    boxstyle="round,pad=0.5",
+                    facecolor="white",
+                    alpha=0.85,
+                    edgecolor="gray",
+                ),
+            )
+
+            ax.text(
+                0.05,
+                0.95,
+                f"Time: {avg_time:.3f} ± {std_time:.3f} s",
+                transform=ax.transAxes,
+                fontsize=8,
+                verticalalignment='top',
+                bbox=dict(
+                    boxstyle="round,pad=0.5",
+                    facecolor="white",
+                    alpha=0.85,
+                    edgecolor="gray",
+                ),
+            )
+
+            ax.grid(True, alpha=0.3, linestyle="--", linewidth=0.7)
+            ax.set_ylim(bottom=0)
+
+            if i == 0:
+                ax.set_title(
+                    f"N = {N}", fontsize=13, fontweight="bold", pad=10
+                )
+            if j == 0:
+                ax.set_ylabel(f"t = {t}", fontsize=12, fontweight="bold")
+
+    fig.text(0.5, 0.02, "x", ha="center", fontsize=13, fontweight="bold")
+    fig.text(
+        0.02,
+        0.5,
+        "P(x,t)",
+        va="center",
+        rotation="vertical",
+        fontsize=13,
+        fontweight="bold",
+    )
+
+    plt.suptitle(
+        f"Spectral Series (Eq.18) vs Integral Map – {title_alpha_str}",
+        fontsize=16,
+        fontweight="bold",
+        y=0.995,
+    )
+    plt.tight_layout(rect=[0.03, 0.03, 1, 0.99])
+    fig.savefig(
+        f"fig6_spectral_vs_integral_{fname_alpha_str}.png", dpi=300, bbox_inches="tight", facecolor="white"
+    )
+    plt.close(fig)
+
+def generate_timing_plot():
+    """Generates the timing vs. N plot for alpha = 1/3."""
+    print("\nGenerating timing vs. N plot for α = 1/3...")
+    alpha_spec = 1.0 / 3.0
+    times_spec = [0.01, 0.1, 1.0, 10.0, 100.0]
+    Ns_list_timing = [5, 10, 20, 40, 60, 80, 100, 120, 140, 160, 180, 200]
+    n_repeats = 5
+    x_spec = np.linspace(-0.5, 1.5, 400)
+    m, omega, k_B, T, gamma = 1.0, 1.0, 1.0, 1.0, 1.0
+    x0 = 0.5
+
+    tasks = []
+    for t in times_spec:
+        for N in Ns_list_timing:
+            for _ in range(n_repeats):
+                tasks.append((t, N, x_spec, x0, alpha_spec, m, omega, k_B, T, gamma))
+
+    pool = multiprocessing.Pool(processes=8)
+    results = []
+    total_steps = len(tasks)
+    print_progress(0, total_steps, prefix='Timing Plot Progress:', suffix='Complete', length=50)
+    for i, result in enumerate(pool.imap_unordered(compute_spec_and_time, tasks)):
+        results.append(result)
+        print_progress(i + 1, total_steps, prefix='Timing Plot Progress:', suffix='Complete', length=50)
+    pool.close()
+    pool.join()
+
+    timings = {}
+    for t, N, timing, _ in results:
+        if (t, N) not in timings:
+            timings[(t, N)] = []
+        timings[(t, N)].append(timing)
+
+    fig, ax = plt.subplots(figsize=(10, 7))
+    colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd"]
+
+    for t, color in zip(times_spec, colors):
+        avg_times = [np.mean(timings[(t, N)]) for N in Ns_list_timing]
+        std_times = [np.std(timings[(t, N)]) for N in Ns_list_timing]
+        ax.errorbar(Ns_list_timing, avg_times, yerr=std_times, label=f"t = {t}", color=color, capsize=3, marker='o')
+
+    ax.set_xlabel("N (Number of terms in spectral series)", fontsize=14, fontweight="bold")
+    ax.set_ylabel("Average Computation Time (s)", fontsize=14, fontweight="bold")
+    ax.set_title("Computation Time vs. N for α = 1/3", fontsize=16, fontweight="bold")
+    ax.grid(True, alpha=0.35, linestyle="--", linewidth=0.7)
+    ax.legend(title="Time (t)")
+    ax.set_yscale('log')
+    plt.tight_layout()
+    fig.savefig("fig_timing_vs_N_alpha_1_3.png", dpi=300, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
 
 def main():
     """Generate Figure 6 plots for α=1/2 (Smirnov) and α=1/3 and compare them with α=0."""
@@ -273,22 +476,13 @@ def main():
     for alpha in alphas:
         fig = plt.figure(figsize=(14, 8))
         ax_main = fig.add_subplot(1, 1, 1)
-        print(f"Generating figure for alpha={alpha:.3f}...")
+        print(f"\nGenerating figure for alpha={alpha:.3f}...")
 
         for t, c in zip(times, colors):
-            print(f"  Computing pdf for t={t}...")
             pdf = compute_pdf_vectorized(
                 x_values, t, x0, alpha=alpha, gamma=gamma, K_beta=K_beta, Ns=800
             )
             ax_main.plot(x_values, pdf, color=c, lw=2.5, label=f"t = {t}", alpha=0.85)
-
-            # Print PDF values
-            idx0 = int(np.argmin(np.abs(x_values - 0.0)))
-            idx1 = int(np.argmin(np.abs(x_values - 1.0)))
-            print(
-                f"    P(x=0, t={t}) = {pdf[idx0]:.6e}, "
-                f"P(x=1, t={t}) = {pdf[idx1]:.6e}"
-            )
 
         # Stationary distribution and x0 marker
         variance_stat = K_beta / gamma
@@ -348,11 +542,10 @@ def main():
         plt.tight_layout()
         fname = f"fig6_alpha_{alpha:.3f}.png".replace("0.", "").replace(".", "_")
         fig.savefig(fname, dpi=300, bbox_inches="tight", facecolor="white")
-        print(f"  Saved {fname}\n")
         plt.close(fig)
 
     # ========== Comparison panels for α=1/2 vs α=1/3 ==========
-    print("Generating comparison panels: α = 1/2 vs α = 1/3")
+    print("\nGenerating comparison panels: α = 1/2 vs α = 1/3")
     panel_times = [0.01, 0.1, 1.0, 10.0, 100.0]
     x_panel = np.linspace(-0.5, 1.5, 600)
     fig, axes = plt.subplots(2, 2, figsize=(14, 10), sharey=True)
@@ -419,124 +612,20 @@ def main():
     fig.savefig(
         "fig6_comparison_panels.png", dpi=300, bbox_inches="tight", facecolor="white"
     )
-    print("Saved fig6_comparison_panels.png\n")
     plt.close(fig)
 
-    # ========== Spectral series vs integral solution (α=1/3) ==========
-    print("Spectral series comparison (α = 1/3) vs integral map solution")
-    alpha_spec = 1.0 / 3.0
-    times_spec = times
+    # ========== Spectral series vs integral solution ==========
     Ns_list = [5, 20, 100, 200]
-    n_rows = len(times_spec)
-    n_cols = len(Ns_list)
-    x_spec = np.linspace(-0.5, 1.5, 400)
-
-    # New: For timing
     n_repeats = 5
+    times_spec = times
+    generate_spectral_comparison_plot(1.0/3.0, times_spec, Ns_list, n_repeats, x0, gamma, K_beta, m, omega, k_B, T)
+    generate_spectral_comparison_plot(0.5, times_spec, Ns_list, n_repeats, x0, gamma, K_beta, m, omega, k_B, T)
 
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(16, 12), sharex=True, sharey=True)
-
-    for i, t in enumerate(times_spec):
-        ref = compute_pdf_vectorized(
-            x_spec, t, x0, alpha=alpha_spec, gamma=gamma, K_beta=K_beta, Ns=800
-        )
-        for j, N in enumerate(Ns_list):
-            ax = axes[i, j] if n_rows > 1 else axes[j]
-            print(f"  time={t}, N={N}: computing spectral series")
-
-            # New: timing loop
-            timings = []
-            for _ in range(n_repeats):
-                start_time = time.perf_counter()
-                spec = spectral_series_pdf(
-                    x_spec, t, x0, alpha_spec, N, m, omega, k_B, T, gamma
-                )
-                end_time = time.perf_counter()
-                timings.append(end_time - start_time)
-            
-            avg_time = np.mean(timings)
-            std_time = np.std(timings)
-
-            ax.plot(x_spec, ref, color="black", lw=2.5, label="integral", alpha=0.8)
-            ax.plot(
-                x_spec,
-                spec,
-                color="#d62728",
-                lw=2,
-                linestyle="--",
-                label=f"N={N}",
-                alpha=0.8,
-            )
-
-            L1 = np.trapezoid(np.abs(spec - ref), x_spec)
-            ax.text(
-                0.95,
-                0.95,
-                f"L¹={L1:.2e}",
-                transform=ax.transAxes,
-                fontsize=10,
-                verticalalignment='top',
-                horizontalalignment='right',
-                bbox=dict(
-                    boxstyle="round,pad=0.5",
-                    facecolor="white",
-                    alpha=0.85,
-                    edgecolor="gray",
-                ),
-            )
-
-            # New: Add timing information
-            ax.text(
-                0.05,
-                0.95,
-                f"Time: {avg_time:.3f} ± {std_time:.3f} s",
-                transform=ax.transAxes,
-                fontsize=8,
-                verticalalignment='top',
-                bbox=dict(
-                    boxstyle="round,pad=0.5",
-                    facecolor="white",
-                    alpha=0.85,
-                    edgecolor="gray",
-                ),
-            )
-
-            ax.grid(True, alpha=0.3, linestyle="--", linewidth=0.7)
-            ax.set_ylim(bottom=0)
-
-            if i == 0:
-                ax.set_title(
-                    f"N = {N}", fontsize=13, fontweight="bold", pad=10
-                )
-            if j == 0:
-                ax.set_ylabel(f"t = {t}", fontsize=12, fontweight="bold")
-
-    fig.text(0.5, 0.02, "x", ha="center", fontsize=13, fontweight="bold")
-    fig.text(
-        0.02,
-        0.5,
-        "P(x,t)",
-        va="center",
-        rotation="vertical",
-        fontsize=13,
-        fontweight="bold",
-    )
-
-    plt.suptitle(
-        "Spectral Series (Eq.18) vs Integral Map – α = 1/3",
-        fontsize=16,
-        fontweight="bold",
-        y=0.995,
-    )
-    plt.tight_layout(rect=[0.03, 0.03, 1, 0.99])
-    fig.savefig(
-        "fig6_spectral_vs_integral.png", dpi=300, bbox_inches="tight", facecolor="white"
-    )
-    print("Saved fig6_spectral_vs_integral.png\n")
-    plt.close(fig)
+    # ========== Generate Timing Plot for alpha = 1/3 ==========
+    generate_timing_plot()
 
     # ========== Comparison between fractional and non-fractional cases ==========
-    print("Generating comparison: Fractional vs Non-Fractional cases")
+    print("\nGenerating comparison: Fractional vs Non-Fractional cases")
     comparison_alphas = [0.5, 1.0 / 3.0, 0.0]
     comparison_times = [0.01, 0.1, 1.0, 10.0]
     comparison_x = np.linspace(-1.0, 2.0, 400)
@@ -611,10 +700,9 @@ def main():
         bbox_inches="tight",
         facecolor="white",
     )
-    print("Saved fig6_fractional_vs_nonfractional.png\n")
     plt.close(fig)
 
-    print("=" * 70)
+    print("\n" + "=" * 70)
     print("All figures generated successfully!")
     print("=" * 70)
 
