@@ -1,5 +1,6 @@
 import unittest
 import numpy as np
+from scipy.integrate import quad
 from code2 import (
     # Functions from code2.py to be tested
     mittag_leffler,
@@ -76,9 +77,7 @@ class TestCode2(unittest.TestCase):
         alpha = 0.5
         N = 10
         m, omega, k_B, T, gamma = 1.0, 1.0, 1.0, 1.0, 1.0
-        pdf = spectral_series_pdf(
-            x_grid, t, x0, alpha, N, m, omega, k_B, T, gamma
-        )
+        pdf = spectral_series_pdf(x_grid, t, x0, alpha, N, m, omega, k_B, T, gamma)
         self.assertEqual(pdf.shape, x_grid.shape)
         self.assertTrue(np.all(pdf >= 0))
 
@@ -91,9 +90,7 @@ class TestCode2(unittest.TestCase):
         N = 20  # Use a reasonable number of terms
         m, omega, k_B, T, gamma = 1.0, 1.0, 1.0, 1.0, 1.0
 
-        pdf = spectral_series_pdf(
-            x_grid, t, x0, alpha, N, m, omega, k_B, T, gamma
-        )
+        pdf = spectral_series_pdf(x_grid, t, x0, alpha, N, m, omega, k_B, T, gamma)
 
         integral_val = np.trapezoid(pdf, x_grid)
         print(
@@ -147,9 +144,9 @@ class TestCode2(unittest.TestCase):
         mean_ou = x0 * np.exp(-gamma * t)
         # Variance for standard OU is (K_beta/gamma) * (1 - exp(-2*gamma*t))
         variance_ou = (K_beta / gamma) * (1 - np.exp(-2 * gamma * t))
-        pdf_ou_analytical = (
-            1.0 / np.sqrt(2 * np.pi * variance_ou)
-        ) * np.exp(-0.5 * (x_grid - mean_ou) ** 2 / variance_ou)
+        pdf_ou_analytical = (1.0 / np.sqrt(2 * np.pi * variance_ou)) * np.exp(
+            -0.5 * (x_grid - mean_ou) ** 2 / variance_ou
+        )
 
         # 3. Compare the two results
         l1_diff = np.trapezoid(np.abs(pdf_spectral - pdf_ou_analytical), x_grid)

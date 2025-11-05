@@ -96,7 +96,7 @@ def n_function_s_array(s, t, alpha=0.5):
 def ou_kernel(x_grid, s_grid, x0, gamma=1.0, K_beta=1.0):
     """Return P1(x,s) array with shape (len(x_grid), len(s_grid)).
 
-    P1(x,s) = Normal(x; mean = x0 e^{-γ s}, 
+    P1(x,s) = Normal(x; mean = x0 e^{-γ s},
     variance = (K_beta/γ)(1 - e^{-2 γ s}))
     """
     x = np.asarray(x_grid)
@@ -176,13 +176,13 @@ def spectral_series_pdf(x_grid, t, x0, alpha, N, m, omega, k_B, T, gamma=1.0):
     """
     Exact implementation of Equation (18) from the paper for harmonic potential.
 
-    This computes the PDF for a fractional OU process with harmonic potential V(x) = (1/2)*m*ω²*x²
+    This computes the PDF for a fractional OU process with harmonic potential
+    V(x) = (1/2)*m*ω²*x²
     using the exact spectral series with non-normalized Hermite polynomials.
 
     Equation (18) from the paper:
-    W = √(mω²/2πk_B T) * Σ_{n=0}^∞ [1/(2^n n!)] * E_alpha(-lambda_n * t^alpha) 
-    * H_n(x̃/√2) * H_n(x̃'/√2) * exp(-x̃²/2)
-
+    W = √(mω²/2πk_B T) * Σ_{n=0}^∞ [1/(2^n n!)] * E_alpha(-lambda_n * t^alpha)
+        * H_n(x̃/√2) * H_n(x̃'/√2) * exp(-x̃²/2)
     Parameters:
     -----------
     x_grid : array
@@ -255,7 +255,8 @@ def main():
 
     print("=" * 70)
     print(
-        "Figure 6: Fractional OU Process (normalized Lévy densities) and Comparison with Non-Fractional Case"
+        "Figure 6: Fractional OU Process (normalized Lévy densities) and "
+        "Comparison with Non-Fractional Case"
     )
     print("=" * 70)
 
@@ -284,7 +285,8 @@ def main():
             idx0 = int(np.argmin(np.abs(x_values - 0.0)))
             idx1 = int(np.argmin(np.abs(x_values - 1.0)))
             print(
-                f"    P(x=0, t={t}) = {pdf[idx0]:.6e}, P(x=1, t={t}) = {pdf[idx1]:.6e}"
+                f"    P(x=0, t={t}) = {pdf[idx0]:.6e}, "
+                f"P(x=1, t={t}) = {pdf[idx1]:.6e}"
             )
 
         # Stationary distribution and x0 marker
@@ -471,7 +473,9 @@ def main():
             ax.set_ylim(bottom=0)
 
             if i == 0:
-                ax.set_title(f"N = {N}", fontsize=13, fontweight="bold", pad=10)
+                ax.set_title(
+                    f"N = {N}", fontsize=13, fontweight="bold", pad=10
+                )
             if j == 0:
                 ax.set_ylabel(f"t = {t}", fontsize=12, fontweight="bold")
 
