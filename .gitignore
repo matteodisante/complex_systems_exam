@@ -1,8 +1,11 @@
 # File immagine generati dal progetto
 *.png
+figures/
 
-*.pkl
-# Byte-compiled / optimized / DLL files
+# Generated data and cache files
+data/
+
+# Compiled/optimized Python files
 __pycache__/
 *.py[cod]
 *$py.class
