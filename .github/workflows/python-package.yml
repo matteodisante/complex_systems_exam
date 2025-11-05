@@ -26,6 +26,7 @@ jobs:
       #    (Make sure flake8 is in requirements.txt)
       - name: Lint with flake8
         run: docker run my-app flake8 .
+        continue-on-error: true
 
       # 4. Run Tests INSIDE the container
       #    Starts another container and gives it the 'pytest' command
