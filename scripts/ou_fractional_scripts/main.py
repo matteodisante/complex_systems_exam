@@ -33,7 +33,7 @@ def main(use_cache, num_cores):
 
     # --- General Parameters ---
     betas = [0.5, 1.0 / 3.0]  # The stability parameters to be analyzed
-    m, omega, k_B, T, gamma = 1.0, 1.0, 1.0, 1.0, 1.0  # Physical constants
+    theta = 1.0  # Relaxation rate
     K_beta = 1.0  # Diffusion coefficient
     x0 = 0.5  # Initial position
     times = [0.01, 0.1, 1.0, 10.0, 100.0]  # Time points for the main figures
@@ -44,18 +44,18 @@ def main(use_cache, num_cores):
 
     # Generate the main PDF evolution figures for each beta
     for beta in betas:
-        generate_main_figure(beta, times, colors, x_values, x0, gamma, K_beta, use_cache=use_cache)
+        generate_main_figure(beta, times, colors, x_values, x0, theta, K_beta, use_cache=use_cache)
 
     # Generate the 2x2 panel comparing beta=1/2 and beta=1/3
     panel_times = [0.01, 0.1, 1.0, 10.0]
-    generate_comparison_panels(panel_times, x0, gamma, K_beta, use_cache=use_cache)
+    generate_comparison_panels(panel_times, x0, theta, K_beta, use_cache=use_cache)
 
     # Generate the spectral method vs. integral method comparison plots
     Ns_list = [5, 20, 100, 200]  # Number of terms in the spectral series
     n_repeats = 5  # Number of times to repeat the timing for averaging
     times_spec = times
-    generate_spectral_comparison_plot(1.0/3.0, times_spec, Ns_list, n_repeats, x0, gamma, K_beta, m, omega, k_B, T, num_cores=num_cores, use_cache=use_cache)
-    generate_spectral_comparison_plot(0.5, times_spec, Ns_list, n_repeats, x0, gamma, K_beta, m, omega, k_B, T, num_cores=num_cores, use_cache=use_cache)
+    generate_spectral_comparison_plot(1.0/3.0, times_spec, Ns_list, n_repeats, x0, theta, K_beta, num_cores=num_cores, use_cache=use_cache)
+    generate_spectral_comparison_plot(0.5, times_spec, Ns_list, n_repeats, x0, theta, K_beta, num_cores=num_cores, use_cache=use_cache)
 
     # Generate the plot showing computation time vs. N for the spectral method
     generate_timing_plot(num_cores=num_cores, use_cache=use_cache)
@@ -63,7 +63,7 @@ def main(use_cache, num_cores):
     # Generate the plot comparing fractional cases with the standard non-fractional (beta=0) case
     comparison_betas = [0.5, 1.0 / 3.0, 0.0]
     comparison_times = [0.01, 0.1, 1.0, 10.0]
-    generate_fractional_vs_nonfractional_plot(comparison_betas, comparison_times, x0, gamma, K_beta, use_cache=use_cache)
+    generate_fractional_vs_nonfractional_plot(comparison_betas, comparison_times, x0, theta, K_beta, use_cache=use_cache)
 
     print("\n" + "=" * 70)
     print("All figures generated successfully!")

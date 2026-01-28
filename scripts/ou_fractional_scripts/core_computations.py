@@ -1,22 +1,25 @@
 import numpy as np
 import math
-from scipy.special import kv, factorial, eval_hermite
+from scipy.special import kv, eval_hermite, gammaln
 
 def l_beta(beta, z):
     """
     Computes the normalized analytic Lévy densities for specific beta values.
-
-    This function provides the probability density functions (PDFs) for stable distributions
-    used in the context of fractional calculus. It currently supports beta=1/2 (Smirnov distribution)
-    and beta=1/3. These distributions are fundamental for describing subordinating processes
-    in fractional Fokker-Planck equations.
+    
+    THEORY CONNECTION:
+    This function corresponds to the probability density of the stable subordinator.
+    It is the building block for the memory kernel M(t) in the Time-Fractional Fokker-Planck Equation (T-FFPE).
+    
+    Notation:
+    - beta: The fractional order of the time derivative (0 < beta <= 1).
+    - z: The scaling variable related to time.
 
     Args:
-        beta (float): The stability parameter. Must be close to 0.5 or 1/3.
-        z (array_like): The random variable, must be positive.
+        beta (float): Stability parameter (fractional exponent), expected in (0, 1].
+        z (array_like): Positive scaling variable; shape (N,) or scalar.
 
     Returns:
-        np.ndarray: The value of the Lévy PDF at each point in z.
+        np.ndarray: Lévy PDF values; same shape as `z`.
     """
     z = np.asarray(z)
     out = np.zeros_like(z, dtype=float)
@@ -24,9 +27,11 @@ def l_beta(beta, z):
     if not np.any(mask):
         return out
 
-    # Case for beta = 1/2, the Smirnov distribution.
+    # Case for beta = 1/2 (Smirnov density).
+    # Used in the "Blue" curves in the presentation.
+    # Formula:
+    # l_{1/2}(z) = (1 / (2 * sqrt(pi))) * z^{-3/2} * exp(-1 / (4 z))
     if abs(beta - 0.5) < 1e-12:
-        # Formula: l(z) = (1 / (2 * sqrt(pi))) * z^(-3/2) * exp(-1 / (4z))
         out[mask] = (
             (1.0 / (2.0 * math.sqrt(math.pi)))
             * z[mask] ** (-1.5)
@@ -34,9 +39,11 @@ def l_beta(beta, z):
         )
         return out
 
-    # Case for beta = 1/3, using the modified Bessel function of the second kind (kv).
+    # Case for beta = 1/3.
+    # Used in the "Orange" curves. Represents a more anomalous process with heavier tails.
+    # Formula:
+    # l_{1/3}(z) = (1 / (3 * pi)) * z^{-3/2} * K_{1/3}(2 / sqrt(27 z))
     if abs(beta - 1.0 / 3.0) < 1e-12:
-        # Formula: l(z) = (1 / (3 * pi)) * z^(-3/2) * K_{1/3}(2 / sqrt(27z))
         arg = 2.0 / np.sqrt(27.0 * z[mask])
         with np.errstate(over="ignore", invalid="ignore"):
             kv_vals = kv(1.0 / 3.0, arg)
@@ -50,215 +57,226 @@ def l_beta(beta, z):
 
 def n_function_s_array(s, t, beta=0.5):
     """
-    Computes the memory kernel n(s, t) for a given time t and stability parameter beta.
+    Computes the memory kernel n(s, t) for the subordination integral.
 
-    This function represents the distribution of subordination times 's' at a physical time 't'.
-    It is derived from the Lévy density l_beta and is a key component in solving the
-    fractional Fokker-Planck equation via subordination.
+    THEORY CONNECTION:
+    This function maps the physical time 't' to the operational time 's' (internal clock).
+    It allows the solution of the fractional equation to be written as an integral over 
+    the standard Markovian solution (Subordination Map).
 
     Args:
-        s (array_like): The subordination time variable.
-        t (float): The physical time.
-        beta (float, optional): The stability parameter. Defaults to 0.5.
+        s (array_like): Operational/subordination time grid; shape (Ns,) or scalar.
+        t (float): Physical time (scalar).
+        beta (float, optional): Stability parameter (fractional exponent).
 
     Returns:
-        np.ndarray: The value of the memory kernel for each s.
+        np.ndarray: Memory kernel values n(s, t); same shape as `s`.
     """
     s = np.asarray(s)
     beta = float(beta)
     
-    # Transformation of variables for l_beta
+    # Change of variables: z = t / s^(1/beta) used inside l_beta.
+    # This ties the operational time distribution to the physical time.
     z = t / (s ** (1.0 / beta))
     lz = l_beta(beta, z)
 
-    # Formula: n(s,t) = (1/α) * (t / s^(1+1/α)) * l_α(t / s^(1/α))
+    # Assemble kernel: n(s,t) = (1/beta) * (t / s^(1+1/beta)) * l_beta(z)
     out = np.zeros_like(s, dtype=float)
-    mask = s > 0  # Avoid division by zero
+    mask = s > 0
     out[mask] = (1.0 / beta) * (t / (s[mask] ** (1.0 + 1.0 / beta))) * lz[mask]
-    out[~np.isfinite(out)] = 0.0  # Clean up any non-finite values
+    out[~np.isfinite(out)] = 0.0 
     return out
 
 
-def ou_kernel(x_grid, s_grid, x0, gamma=1.0, K_beta=1.0):
+def ou_kernel(x_grid, s_grid, x0, theta=1.0, K_beta=1.0):
     """
-    Computes the propagator for the standard Ornstein-Uhlenbeck (OU) process.
+    Computes the propagator P1(x, s | x0) for the standard Ornstein-Uhlenbeck process.
 
-    This function gives the probability P1(x, s | x0) of finding the particle at position x
-    at time s, given it started at x0. This is the solution to the standard Fokker-Planck
-    equation, which will be subordinated to solve the fractional case.
+    THEORY CONNECTION (Slide 114):
+    This corresponds to the limit beta = 1.
+    It describes a Gaussian packet relaxing in a harmonic potential with rate theta.
+    
+    Notation:
+    - theta: Relaxation rate (drift coefficient).
+    - K_beta: Generalized diffusion coefficient.
 
     Args:
-        x_grid (array_like): Grid of spatial points x.
-        s_grid (array_like): Grid of subordination times s.
-        x0 (float): The initial position.
-        gamma (float, optional): The friction/damping coefficient. Defaults to 1.0.
-        K_beta (float, optional): The diffusion coefficient (related to temperature). Defaults to 1.0.
+        x_grid (array_like): Spatial grid; shape (Nx,).
+        s_grid (array_like): Operational time grid; shape (Ns,).
+        x0 (float): Initial position (scalar).
+        theta (float): Relaxation rate (drift coefficient).
+        K_beta (float): Diffusion coefficient.
 
     Returns:
-        np.ndarray: A 2D array of shape (len(x_grid), len(s_grid)) containing the probabilities.
+        np.ndarray: OU propagator P1(x, s | x0); shape (Nx, Ns).
     """
     x = np.asarray(x_grid)
     s = np.asarray(s_grid)
 
-    # Mean and variance of the OU process at time s
-    mean = x0 * np.exp(-gamma * s)
-    variance = (K_beta / gamma) * (1.0 - np.exp(-2.0 * gamma * s))
-    variance[variance <= 1e-16] = 1e-16  # Avoid division by zero for small s
+    # Mean and variance of the OU process at operational time s
+    # Mean decays exponentially: x0 * exp(-theta * s)
+    mean = x0 * np.exp(-theta * s)
+    
+    # Variance saturates to K_beta / theta as s -> infinity
+    variance = (K_beta / theta) * (1.0 - np.exp(-2.0 * theta * s))
+    variance[variance <= 1e-16] = 1e-16 
 
-    # Gaussian PDF for the OU process
     norm = 1.0 / np.sqrt(2.0 * np.pi * variance)
     
-    # Use broadcasting to efficiently compute the PDF over the grids
     X = x[:, None]
     M = mean[None, :]
     V = variance[None, :]
+    
+    # Gaussian propagator P1(x, s | x0)
     P1 = norm[None, :] * np.exp(-0.5 * (X - M) ** 2 / V)
     return P1
 
 
 def compute_pdf_vectorized(
-    x_grid, t, x0, beta=0.5, gamma=1.0, K_beta=1.0, s_max=None, Ns=1000
+    x_grid, t, x0, beta=0.5, theta=1.0, K_beta=1.0, s_max=None, Ns=1000
 ):
     """
-    Computes the PDF P(x, t) of the fractional OU process via numerical integration.
-
-    This function implements the subordination method: P(x,t) = integral from 0 to inf of
-    P1(x,s) * n(s,t) ds, where P1 is the standard OU propagator and n(s,t) is the memory kernel.
-    The integration is performed numerically over a non-uniform grid for s.
+    Computes the PDF P(x, t) via numerical integration of the Integral Map (Barkai's method).
+    
+    THEORY CONNECTION:
+    P(x, t) = ∫ P1(x, s) * n(s, t) ds
+    This mixes the Markovian Gaussian P1 with the non-Markovian memory kernel n(s, t).
 
     Args:
-        x_grid (array_like): Grid of spatial points x.
-        t (float): The physical time.
-        x0 (float): The initial position.
-        beta (float, optional): The stability parameter. Defaults to 0.5.
-        gamma (float, optional): The friction coefficient. Defaults to 1.0.
-        K_beta (float, optional): The diffusion coefficient. Defaults to 1.0.
-        s_max (float, optional): The upper limit for the s-integration. If None, it's estimated.
-        Ns (int, optional): The number of points for the s-integration grid.
+        x_grid (array_like): Spatial grid; shape (Nx,).
+        t (float): Physical time (scalar).
+        x0 (float): Initial position (scalar).
+        beta (float, optional): Stability parameter (fractional exponent).
+        theta (float, optional): Relaxation rate.
+        K_beta (float, optional): Diffusion coefficient.
+        s_max (float, optional): Upper cutoff for operational time integration.
+        Ns (int, optional): Number of integration points for s.
 
     Returns:
-        np.ndarray: The computed PDF P(x,t) for each point in x_grid.
+        np.ndarray: PDF values P(x, t); shape (Nx,).
     """
     if s_max is None:
-        # Heuristic for the upper integration limit, needs to be large enough
         s_max = max(200.0, 50.0 * t**beta)
 
-    # Create a non-uniform grid for s to capture behavior at both small and large s
+    # Non-uniform grid for efficient integration over s
+    # - s_small resolves the sharp behavior near s ≈ 0
+    # - s_mid captures the long-time tail up to s_max
     s_small = np.logspace(-8, -2, Ns // 4)
     s_mid = np.logspace(-2, np.log10(max(1.0, s_max)), 3 * Ns // 4)
     s = np.unique(np.concatenate([s_small, s_mid]))
 
-    # Compute the two components of the integrand
     n_vals = n_function_s_array(s, t, beta=beta)
-    P1 = ou_kernel(x_grid, s, x0, gamma=gamma, K_beta=K_beta)
+    P1 = ou_kernel(x_grid, s, x0, theta=theta, K_beta=K_beta)
 
-    # Perform the trapezoidal integration over s
+    # Numerical integration (Trapezoidal rule) over s
     pdf = np.trapezoid(P1 * n_vals, s)
-
-    pdf[pdf < 0] = 0.0  # Ensure positivity
+    pdf[pdf < 0] = 0.0 
     return pdf
 
 
 def mittag_leffler(beta, z):
     """
-    Computes the Mittag-Leffler function E_beta(z) using the mpmath library.
-
-    The Mittag-Leffler function is a generalization of the exponential function and appears
-    frequently in the solutions of fractional differential equations.
-    E_beta(z) = sum_{k=0 to inf} (z^k / Gamma(beta*k + 1)).
+    Computes the Mittag-Leffler function E_beta(z).
+    
+    THEORY CONNECTION:
+    This function replaces the standard exponential relaxation in fractional systems.
+    - For small t: Stretched exponential (fast initial decay).
+    - For large t: Power-law decay (heavy tail/memory).
 
     Args:
-        beta (float): The beta parameter of the function.
-        z (float): The argument of the function.
+        beta (float): Fractional exponent (typically 0 < beta <= 1).
+        z (float): Argument of the function (scalar).
 
     Returns:
-        float: The computed value of E_beta(z). Returns None if mpmath is not available.
+        float | None: E_beta(z) if computed, otherwise None.
     """
     try:
         import mpmath
-        # Use high-precision arithmetic for accurate summation
         mp = mpmath.mp
-        mp.dps = max(50, mp.dps)  # Set decimal precision
+        mp.dps = max(50, mp.dps) 
         beta_mp = mp.mpf(beta)
         z_mp = mp.mpf(z)
 
-        # Define the k-th term of the series
         def term(k):
             kmp = mp.mpf(k)
             return (z_mp**kmp) / mp.gamma(beta_mp * kmp + 1)
 
-        # Sum the series to infinity
         val = mpmath.nsum(term, [0, mp.inf])
         return float(val)
     except ImportError:
-        print("Warning: mpmath library not found. Mittag-Leffler function is not available.")
+        print("Warning: mpmath library not found.")
         return None
     except Exception as e:
-        print(f"An error occurred in Mittag-Leffler computation: {e}")
+        print(f"Error in Mittag-Leffler: {e}")
         return None
 
 
-def spectral_series_pdf(x_grid, t, x0, beta, N, m, omega, k_B, T, gamma=1.0):
+def spectral_series_pdf(x_grid, t, x0, beta, N, theta=1.0, K_beta=1.0):
     """
-    Computes the PDF P(x,t) using the spectral series expansion (Equation 18 from the paper).
+    Computes the PDF using the Spectral Series Expansion (Slide 113).
+    
+     ====================== THEORY MAPPING (SLIDE 113) ======================
+     1. Prefactor:
+         sqrt(theta / (2 pi K_beta))
 
-    This provides an exact solution for the fractional OU process in a harmonic potential,
-    expressed as a series of Hermite polynomials. It is computationally intensive but serves
-    as a benchmark for the numerical integration method.
+     2. Gaussian factor (outside the sum):
+         exp( - theta x^2 / (2 K_beta) )
+
+     3. Hermite arguments:
+         sqrt(theta / (2 K_beta)) * x  and  sqrt(theta / (2 K_beta)) * x0
+     ========================================================================
 
     Args:
-        x_grid (array_like): Grid of spatial points x.
-        t (float): The physical time.
-        x0 (float): The initial position.
-        beta (float): The stability parameter.
-        N (int): The number of terms to include in the series expansion.
-        m (float): Mass of the particle.
-        omega (float): Angular frequency of the harmonic potential.
-        k_B (float): Boltzmann constant.
-        T (float): Temperature.
-        gamma (float, optional): The friction coefficient. Defaults to 1.0.
+        x_grid (array_like): Spatial grid; shape (Nx,).
+        t (float): Physical time (scalar).
+        x0 (float): Initial position (scalar).
+        beta (float): Fractional exponent (0 < beta <= 1).
+        N (int): Number of terms in the truncated series.
+        theta (float, optional): Relaxation rate.
+        K_beta (float, optional): Generalized diffusion coefficient.
 
     Returns:
-        np.ndarray: The computed PDF P(x,t) from the series expansion.
+        np.ndarray: PDF values from spectral series; shape (Nx,).
     """
     x_grid = np.asarray(x_grid)
 
-    # Rescale variables to their dimensionless form (tilde variables in the paper)
-    # Rescale variables. 
-    # NOTE: x_tilde here corresponds to x / sigma_equilibrium.
-    # In the slides, we use xi = x_tilde / sqrt(2).
-    x_tilde = x_grid * np.sqrt(m * omega**2 / (k_B * T))
-    x0_tilde = x0 * np.sqrt(m * omega**2 / (k_B * T))
+    # Scale factor for Hermite arguments and Gaussian width
+    # sqrt(theta / (2 K_beta)) matches the slide definition.
+    scale = np.sqrt(theta / (2.0 * K_beta))
 
-    # Normalization factor for the PDF
-    norm_factor = np.sqrt(m * omega**2 / (2.0 * np.pi * k_B * T))
+    # Prefactor from the stationary Gaussian distribution
+    norm_factor = np.sqrt(theta / (2.0 * np.pi * K_beta))
 
     pdf = np.zeros_like(x_grid, dtype=float)
 
-    # Sum the first N terms of the spectral series
+    # Sum over the eigenstates (truncated series at N terms)
     for n in range(N):
-        # Eigenvalue of the Fokker-Planck operator
-        lambda_n = n * gamma
+        # Eigenvalue lambda_n = n * theta (Linear spectrum)
+        lambda_n = n * theta
 
-        # Argument for the Mittag-Leffler function
+        # Temporal relaxation term: E_beta(-n * theta * t^beta)
         ml_arg = -lambda_n * t**beta
         E_n = mittag_leffler(beta, ml_arg)
         
         if E_n is None:
-            raise RuntimeError("Mittag-Leffler computation failed. Check if mpmath is installed.")
+            raise RuntimeError("Mittag-Leffler computation failed.")
 
-        # Coefficient for the n-th term
-        coeff = 1.0 / (2**n * factorial(n))
+        # Normalization coefficient for Hermite polynomials (1 / 2^n n!).
+        # Use log-space to avoid overflow in n! and 2^n for large n:
+        # log(coeff) = -n * log(2) - log(n!) with log(n!) = gammaln(n + 1).
+        # This is numerically equivalent but stable; cost is negligible vs. Hermite evals.
+        log_coeff = -n * np.log(2.0) - gammaln(n + 1.0)
+        coeff = np.exp(log_coeff)
 
-        # Hermite polynomials evaluated at rescaled positions
-        H_n_x_tilde = eval_hermite(n, x_tilde / np.sqrt(2.0))
-        H_n_x0_tilde = eval_hermite(n, x0_tilde / np.sqrt(2.0))
+        # Hermite polynomials evaluated at scaled positions
+        H_n_x = eval_hermite(n, scale * x_grid)
+        H_n_x0 = eval_hermite(n, scale * x0)
 
-        # Gaussian part of the basis function
-        gaussian = np.exp(-(x_tilde**2) / 2.0)
+        # Gaussian weight outside the sum: exp(-theta x^2 / (2 K_beta))
+        gaussian = np.exp(-(theta * x_grid**2) / (2.0 * K_beta))
 
-        # Add the n-th term to the total PDF
-        pdf += norm_factor * coeff * E_n * H_n_x_tilde * H_n_x0_tilde * gaussian
+        # Summing eigenstates: prefactor * gaussian * H_n(x) H_n(x0)
+        pdf += norm_factor * coeff * E_n * H_n_x * H_n_x0 * gaussian
 
-    pdf[pdf < 0] = 0.0  # Ensure positivity
+    pdf[pdf < 0] = 0.0
     return pdf

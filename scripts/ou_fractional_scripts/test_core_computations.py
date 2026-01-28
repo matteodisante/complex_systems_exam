@@ -87,8 +87,8 @@ class TestCoreComputations(unittest.TestCase):
         x0 = 0.0
         beta = 0.5
         N = 10
-        m, omega, k_B, T, gamma = 1.0, 1.0, 1.0, 1.0, 1.0
-        pdf = spectral_series_pdf(x_grid, t, x0, beta, N, m, omega, k_B, T, gamma)
+        theta, K_beta = 1.0, 1.0
+        pdf = spectral_series_pdf(x_grid, t, x0, beta, N, theta=theta, K_beta=K_beta)
         self.assertEqual(pdf.shape, x_grid.shape)
         self.assertTrue(np.all(pdf >= 0), "PDF values should be non-negative.")
 
@@ -99,9 +99,9 @@ class TestCoreComputations(unittest.TestCase):
         x0 = 0.5
         beta = 1.0 / 3.0
         N = 20  # A reasonable number of terms for convergence
-        m, omega, k_B, T, gamma = 1.0, 1.0, 1.0, 1.0, 1.0
+        theta, K_beta = 1.0, 1.0
 
-        pdf = spectral_series_pdf(x_grid, t, x0, beta, N, m, omega, k_B, T, gamma)
+        pdf = spectral_series_pdf(x_grid, t, x0, beta, N, theta=theta, K_beta=K_beta)
 
         # Numerically integrate the PDF using the trapezoidal rule
         integral_val = np.trapezoid(pdf, x_grid)
@@ -118,11 +118,11 @@ class TestCoreComputations(unittest.TestCase):
         x0 = 0.5
         beta = 1.0 / 3.0
         N = 5  # Few terms are needed as higher-order terms decay quickly
-        m, omega, k_B, T, gamma = 1.0, 1.0, 1.0, 1.0, 1.0
+        theta, K_beta = 1.0, 1.0
 
         # 1. Calculate the PDF from the spectral series at a large time
         pdf_spectral = spectral_series_pdf(
-            x_grid, t_large, x0, beta, N, m, omega, k_B, T, gamma
+            x_grid, t_large, x0, beta, N, theta=theta, K_beta=K_beta
         )
 
         # 2. The analytical stationary solution is the Boltzmann distribution for a harmonic potential.
@@ -147,17 +147,16 @@ class TestCoreComputations(unittest.TestCase):
         x0 = 0.5
         beta = 1.0
         N = 50  # Use a higher number of terms for better accuracy
-        m, omega, k_B, T, gamma = 1.0, 1.0, 1.0, 1.0, 1.0
-        K_beta = 1.0
+        theta, K_beta = 1.0, 1.0
 
         # 1. Calculate the PDF from the spectral series with beta=1
         pdf_spectral = spectral_series_pdf(
-            x_grid, t, x0, beta, N, m, omega, k_B, T, gamma
+            x_grid, t, x0, beta, N, theta=theta, K_beta=K_beta
         )
 
         # 2. Calculate the analytical PDF for the standard OU process
-        mean_ou = x0 * np.exp(-gamma * t)
-        variance_ou = (K_beta / gamma) * (1 - np.exp(-2 * gamma * t))
+        mean_ou = x0 * np.exp(-theta * t)
+        variance_ou = (K_beta / theta) * (1 - np.exp(-2 * theta * t))
         pdf_ou_analytical = (1.0 / np.sqrt(2 * np.pi * variance_ou)) * np.exp(
             -0.5 * (x_grid - mean_ou) ** 2 / variance_ou
         )
