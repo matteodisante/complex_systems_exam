@@ -2,17 +2,17 @@ import numpy as np
 import math
 from scipy.special import kv, factorial, eval_hermite
 
-def l_alpha(alpha, z):
+def l_beta(beta, z):
     """
-    Computes the normalized analytic Lévy densities for specific alpha values.
+    Computes the normalized analytic Lévy densities for specific beta values.
 
     This function provides the probability density functions (PDFs) for stable distributions
-    used in the context of fractional calculus. It currently supports alpha=1/2 (Smirnov distribution)
-    and alpha=1/3. These distributions are fundamental for describing subordinating processes
+    used in the context of fractional calculus. It currently supports beta=1/2 (Smirnov distribution)
+    and beta=1/3. These distributions are fundamental for describing subordinating processes
     in fractional Fokker-Planck equations.
 
     Args:
-        alpha (float): The stability parameter. Must be close to 0.5 or 1/3.
+        beta (float): The stability parameter. Must be close to 0.5 or 1/3.
         z (array_like): The random variable, must be positive.
 
     Returns:
@@ -24,8 +24,8 @@ def l_alpha(alpha, z):
     if not np.any(mask):
         return out
 
-    # Case for alpha = 1/2, the Smirnov distribution.
-    if abs(alpha - 0.5) < 1e-12:
+    # Case for beta = 1/2, the Smirnov distribution.
+    if abs(beta - 0.5) < 1e-12:
         # Formula: l(z) = (1 / (2 * sqrt(pi))) * z^(-3/2) * exp(-1 / (4z))
         out[mask] = (
             (1.0 / (2.0 * math.sqrt(math.pi)))
@@ -34,8 +34,8 @@ def l_alpha(alpha, z):
         )
         return out
 
-    # Case for alpha = 1/3, using the modified Bessel function of the second kind (kv).
-    if abs(alpha - 1.0 / 3.0) < 1e-12:
+    # Case for beta = 1/3, using the modified Bessel function of the second kind (kv).
+    if abs(beta - 1.0 / 3.0) < 1e-12:
         # Formula: l(z) = (1 / (3 * pi)) * z^(-3/2) * K_{1/3}(2 / sqrt(27z))
         arg = 2.0 / np.sqrt(27.0 * z[mask])
         with np.errstate(over="ignore", invalid="ignore"):
@@ -45,36 +45,36 @@ def l_alpha(alpha, z):
         out[out < 0] = 0.0  # Ensure positivity
         return out
 
-    raise ValueError(f"Unsupported alpha: {alpha}. Only 0.5 and 1/3 are implemented.")
+    raise ValueError(f"Unsupported beta: {beta}. Only 0.5 and 1/3 are implemented.")
 
 
-def n_function_s_array(s, t, alpha=0.5):
+def n_function_s_array(s, t, beta=0.5):
     """
-    Computes the memory kernel n(s, t) for a given time t and stability parameter alpha.
+    Computes the memory kernel n(s, t) for a given time t and stability parameter beta.
 
     This function represents the distribution of subordination times 's' at a physical time 't'.
-    It is derived from the Lévy density l_alpha and is a key component in solving the
+    It is derived from the Lévy density l_beta and is a key component in solving the
     fractional Fokker-Planck equation via subordination.
 
     Args:
         s (array_like): The subordination time variable.
         t (float): The physical time.
-        alpha (float, optional): The stability parameter. Defaults to 0.5.
+        beta (float, optional): The stability parameter. Defaults to 0.5.
 
     Returns:
         np.ndarray: The value of the memory kernel for each s.
     """
     s = np.asarray(s)
-    alpha = float(alpha)
+    beta = float(beta)
     
-    # Transformation of variables for l_alpha
-    z = t / (s ** (1.0 / alpha))
-    lz = l_alpha(alpha, z)
+    # Transformation of variables for l_beta
+    z = t / (s ** (1.0 / beta))
+    lz = l_beta(beta, z)
 
     # Formula: n(s,t) = (1/α) * (t / s^(1+1/α)) * l_α(t / s^(1/α))
     out = np.zeros_like(s, dtype=float)
     mask = s > 0  # Avoid division by zero
-    out[mask] = (1.0 / alpha) * (t / (s[mask] ** (1.0 + 1.0 / alpha))) * lz[mask]
+    out[mask] = (1.0 / beta) * (t / (s[mask] ** (1.0 + 1.0 / beta))) * lz[mask]
     out[~np.isfinite(out)] = 0.0  # Clean up any non-finite values
     return out
 
@@ -117,7 +117,7 @@ def ou_kernel(x_grid, s_grid, x0, gamma=1.0, K_beta=1.0):
 
 
 def compute_pdf_vectorized(
-    x_grid, t, x0, alpha=0.5, gamma=1.0, K_beta=1.0, s_max=None, Ns=1000
+    x_grid, t, x0, beta=0.5, gamma=1.0, K_beta=1.0, s_max=None, Ns=1000
 ):
     """
     Computes the PDF P(x, t) of the fractional OU process via numerical integration.
@@ -130,7 +130,7 @@ def compute_pdf_vectorized(
         x_grid (array_like): Grid of spatial points x.
         t (float): The physical time.
         x0 (float): The initial position.
-        alpha (float, optional): The stability parameter. Defaults to 0.5.
+        beta (float, optional): The stability parameter. Defaults to 0.5.
         gamma (float, optional): The friction coefficient. Defaults to 1.0.
         K_beta (float, optional): The diffusion coefficient. Defaults to 1.0.
         s_max (float, optional): The upper limit for the s-integration. If None, it's estimated.
@@ -141,7 +141,7 @@ def compute_pdf_vectorized(
     """
     if s_max is None:
         # Heuristic for the upper integration limit, needs to be large enough
-        s_max = max(200.0, 50.0 * t**alpha)
+        s_max = max(200.0, 50.0 * t**beta)
 
     # Create a non-uniform grid for s to capture behavior at both small and large s
     s_small = np.logspace(-8, -2, Ns // 4)
@@ -149,7 +149,7 @@ def compute_pdf_vectorized(
     s = np.unique(np.concatenate([s_small, s_mid]))
 
     # Compute the two components of the integrand
-    n_vals = n_function_s_array(s, t, alpha=alpha)
+    n_vals = n_function_s_array(s, t, beta=beta)
     P1 = ou_kernel(x_grid, s, x0, gamma=gamma, K_beta=K_beta)
 
     # Perform the trapezoidal integration over s
@@ -159,33 +159,33 @@ def compute_pdf_vectorized(
     return pdf
 
 
-def mittag_leffler(alpha, z):
+def mittag_leffler(beta, z):
     """
-    Computes the Mittag-Leffler function E_alpha(z) using the mpmath library.
+    Computes the Mittag-Leffler function E_beta(z) using the mpmath library.
 
     The Mittag-Leffler function is a generalization of the exponential function and appears
     frequently in the solutions of fractional differential equations.
-    E_alpha(z) = sum_{k=0 to inf} (z^k / Gamma(alpha*k + 1)).
+    E_beta(z) = sum_{k=0 to inf} (z^k / Gamma(beta*k + 1)).
 
     Args:
-        alpha (float): The alpha parameter of the function.
+        beta (float): The beta parameter of the function.
         z (float): The argument of the function.
 
     Returns:
-        float: The computed value of E_alpha(z). Returns None if mpmath is not available.
+        float: The computed value of E_beta(z). Returns None if mpmath is not available.
     """
     try:
         import mpmath
         # Use high-precision arithmetic for accurate summation
         mp = mpmath.mp
         mp.dps = max(50, mp.dps)  # Set decimal precision
-        alpha_mp = mp.mpf(alpha)
+        beta_mp = mp.mpf(beta)
         z_mp = mp.mpf(z)
 
         # Define the k-th term of the series
         def term(k):
             kmp = mp.mpf(k)
-            return (z_mp**kmp) / mp.gamma(alpha_mp * kmp + 1)
+            return (z_mp**kmp) / mp.gamma(beta_mp * kmp + 1)
 
         # Sum the series to infinity
         val = mpmath.nsum(term, [0, mp.inf])
@@ -198,7 +198,7 @@ def mittag_leffler(alpha, z):
         return None
 
 
-def spectral_series_pdf(x_grid, t, x0, alpha, N, m, omega, k_B, T, gamma=1.0):
+def spectral_series_pdf(x_grid, t, x0, beta, N, m, omega, k_B, T, gamma=1.0):
     """
     Computes the PDF P(x,t) using the spectral series expansion (Equation 18 from the paper).
 
@@ -210,7 +210,7 @@ def spectral_series_pdf(x_grid, t, x0, alpha, N, m, omega, k_B, T, gamma=1.0):
         x_grid (array_like): Grid of spatial points x.
         t (float): The physical time.
         x0 (float): The initial position.
-        alpha (float): The stability parameter.
+        beta (float): The stability parameter.
         N (int): The number of terms to include in the series expansion.
         m (float): Mass of the particle.
         omega (float): Angular frequency of the harmonic potential.
@@ -224,6 +224,9 @@ def spectral_series_pdf(x_grid, t, x0, alpha, N, m, omega, k_B, T, gamma=1.0):
     x_grid = np.asarray(x_grid)
 
     # Rescale variables to their dimensionless form (tilde variables in the paper)
+    # Rescale variables. 
+    # NOTE: x_tilde here corresponds to x / sigma_equilibrium.
+    # In the slides, we use xi = x_tilde / sqrt(2).
     x_tilde = x_grid * np.sqrt(m * omega**2 / (k_B * T))
     x0_tilde = x0 * np.sqrt(m * omega**2 / (k_B * T))
 
@@ -238,8 +241,8 @@ def spectral_series_pdf(x_grid, t, x0, alpha, N, m, omega, k_B, T, gamma=1.0):
         lambda_n = n * gamma
 
         # Argument for the Mittag-Leffler function
-        ml_arg = -lambda_n * t**alpha
-        E_n = mittag_leffler(alpha, ml_arg)
+        ml_arg = -lambda_n * t**beta
+        E_n = mittag_leffler(beta, ml_arg)
         
         if E_n is None:
             raise RuntimeError("Mittag-Leffler computation failed. Check if mpmath is installed.")

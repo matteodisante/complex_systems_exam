@@ -3,7 +3,7 @@ import numpy as np
 from scipy.integrate import quad
 from core_computations import (
     mittag_leffler,
-    l_alpha,
+    l_beta,
     n_function_s_array,
     ou_kernel,
     compute_pdf_vectorized,
@@ -19,40 +19,40 @@ class TestCoreComputations(unittest.TestCase):
 
     def test_mittag_leffler(self):
         """Tests the Mittag-Leffler function against known values."""
-        # For alpha=1, E_1(z) is the standard exponential function exp(z).
+        # For beta=1, E_1(z) is the standard exponential function exp(z).
         self.assertAlmostEqual(mittag_leffler(1, 1), np.exp(1), places=5)
         self.assertAlmostEqual(mittag_leffler(1, 0), 1, places=5)
         
-        # For alpha=2, E_2(z) is cosh(sqrt(z)). For z=-1, this is cos(1).
+        # For beta=2, E_2(z) is cosh(sqrt(z)). For z=-1, this is cos(1).
         self.assertAlmostEqual(mittag_leffler(2, 0), 1, places=5)
         self.assertAlmostEqual(mittag_leffler(2, -1), np.cos(1), places=5)
 
-    def test_l_alpha(self):
-        """Tests the Lévy density function l_alpha for correctness and normalization."""
+    def test_l_beta(self):
+        """Tests the Lévy density function l_beta for correctness and normalization."""
         z = np.array([1, 2, 3])
 
-        # Test for alpha = 0.5 (Smirnov distribution)
-        result_half = l_alpha(0.5, z)
+        # Test for beta = 0.5 (Smirnov distribution)
+        result_half = l_beta(0.5, z)
         self.assertEqual(result_half.shape, z.shape)
         self.assertTrue(np.all(result_half >= 0), "PDF values should be non-negative.")
 
-        # Test for alpha = 1/3
-        result_third = l_alpha(1.0 / 3.0, z)
+        # Test for beta = 1/3
+        result_third = l_beta(1.0 / 3.0, z)
         self.assertEqual(result_third.shape, z.shape)
         self.assertTrue(np.all(result_third >= 0), "PDF values should be non-negative.")
 
-        # Test that an unsupported alpha raises a ValueError
+        # Test that an unsupported beta raises a ValueError
         with self.assertRaises(ValueError):
-            l_alpha(0.8, z)
+            l_beta(0.8, z)
 
         # Test that the PDFs are normalized (integrate to 1)
-        norm_half, _ = quad(lambda z_int: l_alpha(0.5, z_int), 0, np.inf)
-        print(f"\nNumerical normalization for alpha=0.5: {norm_half}")
-        self.assertAlmostEqual(norm_half, 1.0, places=4, msg="l_alpha for alpha=0.5 should be normalized.")
+        norm_half, _ = quad(lambda z_int: l_beta(0.5, z_int), 0, np.inf)
+        print(f"\nNumerical normalization for beta=0.5: {norm_half}")
+        self.assertAlmostEqual(norm_half, 1.0, places=4, msg="l_beta for beta=0.5 should be normalized.")
 
-        norm_third, _ = quad(lambda z_int: l_alpha(1.0 / 3.0, z_int), 0, np.inf)
-        print(f"Numerical normalization for alpha=1/3: {norm_third}")
-        self.assertAlmostEqual(norm_third, 1.0, places=4, msg="l_alpha for alpha=1/3 should be normalized.")
+        norm_third, _ = quad(lambda z_int: l_beta(1.0 / 3.0, z_int), 0, np.inf)
+        print(f"Numerical normalization for beta=1/3: {norm_third}")
+        self.assertAlmostEqual(norm_third, 1.0, places=4, msg="l_beta for beta=1/3 should be normalized.")
 
     def test_n_function_s_array(self):
         """Tests the memory kernel function n(s, t) for basic properties."""
@@ -85,10 +85,10 @@ class TestCoreComputations(unittest.TestCase):
         x_grid = np.linspace(-1, 1, 10)
         t = 1.0
         x0 = 0.0
-        alpha = 0.5
+        beta = 0.5
         N = 10
         m, omega, k_B, T, gamma = 1.0, 1.0, 1.0, 1.0, 1.0
-        pdf = spectral_series_pdf(x_grid, t, x0, alpha, N, m, omega, k_B, T, gamma)
+        pdf = spectral_series_pdf(x_grid, t, x0, beta, N, m, omega, k_B, T, gamma)
         self.assertEqual(pdf.shape, x_grid.shape)
         self.assertTrue(np.all(pdf >= 0), "PDF values should be non-negative.")
 
@@ -97,11 +97,11 @@ class TestCoreComputations(unittest.TestCase):
         x_grid = np.linspace(-5, 5, 500)  # Use a wide grid for accurate integration
         t = 1.0
         x0 = 0.5
-        alpha = 1.0 / 3.0
+        beta = 1.0 / 3.0
         N = 20  # A reasonable number of terms for convergence
         m, omega, k_B, T, gamma = 1.0, 1.0, 1.0, 1.0, 1.0
 
-        pdf = spectral_series_pdf(x_grid, t, x0, alpha, N, m, omega, k_B, T, gamma)
+        pdf = spectral_series_pdf(x_grid, t, x0, beta, N, m, omega, k_B, T, gamma)
 
         # Numerically integrate the PDF using the trapezoidal rule
         integral_val = np.trapezoid(pdf, x_grid)
@@ -116,13 +116,13 @@ class TestCoreComputations(unittest.TestCase):
         x_grid = np.linspace(-5, 5, 500)
         t_large = 100.0  # A large time for the system to reach equilibrium
         x0 = 0.5
-        alpha = 1.0 / 3.0
+        beta = 1.0 / 3.0
         N = 5  # Few terms are needed as higher-order terms decay quickly
         m, omega, k_B, T, gamma = 1.0, 1.0, 1.0, 1.0, 1.0
 
         # 1. Calculate the PDF from the spectral series at a large time
         pdf_spectral = spectral_series_pdf(
-            x_grid, t_large, x0, alpha, N, m, omega, k_B, T, gamma
+            x_grid, t_large, x0, beta, N, m, omega, k_B, T, gamma
         )
 
         # 2. The analytical stationary solution is the Boltzmann distribution for a harmonic potential.
@@ -137,22 +137,22 @@ class TestCoreComputations(unittest.TestCase):
 
     def test_spectral_series_vs_standard_ou(self):
         """
-        Tests that for alpha=1, the spectral series solution matches the standard OU process.
+        Tests that for beta=1, the spectral series solution matches the standard OU process.
         
         The Mittag-Leffler function E_1(-z) is exp(-z), so the spectral solution should reduce
-        to the standard Ornstein-Uhlenbeck solution when alpha is 1.
+        to the standard Ornstein-Uhlenbeck solution when beta is 1.
         """
         x_grid = np.linspace(-3, 3, 500)
         t = 1.0
         x0 = 0.5
-        alpha = 1.0
+        beta = 1.0
         N = 50  # Use a higher number of terms for better accuracy
         m, omega, k_B, T, gamma = 1.0, 1.0, 1.0, 1.0, 1.0
         K_beta = 1.0
 
-        # 1. Calculate the PDF from the spectral series with alpha=1
+        # 1. Calculate the PDF from the spectral series with beta=1
         pdf_spectral = spectral_series_pdf(
-            x_grid, t, x0, alpha, N, m, omega, k_B, T, gamma
+            x_grid, t, x0, beta, N, m, omega, k_B, T, gamma
         )
 
         # 2. Calculate the analytical PDF for the standard OU process
@@ -165,10 +165,10 @@ class TestCoreComputations(unittest.TestCase):
         # 3. Compare the two results
         l1_diff = np.trapezoid(np.abs(pdf_spectral - pdf_ou_analytical), x_grid)
         print(
-            f"L1 difference between spectral (alpha=1) and standard OU at t={t}: "
+            f"L1 difference between spectral (beta=1) and standard OU at t={t}: "
             f"{l1_diff}"
         )
-        self.assertLess(l1_diff, 1e-3, "For alpha=1, spectral solution should match standard OU solution.")
+        self.assertLess(l1_diff, 1e-3, "For beta=1, spectral solution should match standard OU solution.")
 
 
 if __name__ == "__main__":

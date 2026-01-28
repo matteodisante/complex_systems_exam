@@ -15,7 +15,7 @@ def main(use_cache, num_cores):
 
     This script generates a series of plots related to the fractional Ornstein-Uhlenbeck (OU) process.
     It visualizes the time evolution of the probability density function (PDF) for different
-    stability parameters (alpha), compares different alpha values, and analyzes the performance
+    stability parameters (beta), compares different beta values, and analyzes the performance
     of the computation methods.
 
     Args:
@@ -32,7 +32,7 @@ def main(use_cache, num_cores):
     print("=" * 70)
 
     # --- General Parameters ---
-    alphas = [0.5, 1.0 / 3.0]  # The stability parameters to be analyzed
+    betas = [0.5, 1.0 / 3.0]  # The stability parameters to be analyzed
     m, omega, k_B, T, gamma = 1.0, 1.0, 1.0, 1.0, 1.0  # Physical constants
     K_beta = 1.0  # Diffusion coefficient
     x0 = 0.5  # Initial position
@@ -42,11 +42,11 @@ def main(use_cache, num_cores):
     
     # --- Figure Generation ---
 
-    # Generate the main PDF evolution figures for each alpha
-    for alpha in alphas:
-        generate_main_figure(alpha, times, colors, x_values, x0, gamma, K_beta, use_cache=use_cache)
+    # Generate the main PDF evolution figures for each beta
+    for beta in betas:
+        generate_main_figure(beta, times, colors, x_values, x0, gamma, K_beta, use_cache=use_cache)
 
-    # Generate the 2x2 panel comparing alpha=1/2 and alpha=1/3
+    # Generate the 2x2 panel comparing beta=1/2 and beta=1/3
     panel_times = [0.01, 0.1, 1.0, 10.0]
     generate_comparison_panels(panel_times, x0, gamma, K_beta, use_cache=use_cache)
 
@@ -60,10 +60,10 @@ def main(use_cache, num_cores):
     # Generate the plot showing computation time vs. N for the spectral method
     generate_timing_plot(num_cores=num_cores, use_cache=use_cache)
 
-    # Generate the plot comparing fractional cases with the standard non-fractional (alpha=0) case
-    comparison_alphas = [0.5, 1.0 / 3.0, 0.0]
+    # Generate the plot comparing fractional cases with the standard non-fractional (beta=0) case
+    comparison_betas = [0.5, 1.0 / 3.0, 0.0]
     comparison_times = [0.01, 0.1, 1.0, 10.0]
-    generate_fractional_vs_nonfractional_plot(comparison_alphas, comparison_times, x0, gamma, K_beta, use_cache=use_cache)
+    generate_fractional_vs_nonfractional_plot(comparison_betas, comparison_times, x0, gamma, K_beta, use_cache=use_cache)
 
     print("\n" + "=" * 70)
     print("All figures generated successfully!")
