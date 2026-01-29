@@ -1,6 +1,6 @@
 # Fractional Ornstein-Uhlenbeck Process Simulation
 
-[![Python Tests](https://github.com/OWNER/REPO/actions/workflows/python-package.yml/badge.svg)](https://github.com/matteodisante/complex_systems_exam/actions/workflows/python-package.yml)
+[![Python Tests](https://github.com/matteodisante/complex_systems_exam/actions/workflows/python-package.yml/badge.svg?branch=main)](https://github.com/matteodisante/complex_systems_exam/actions/workflows/python-package.yml)
 
 This repository contains Python scripts to simulate the fractional Ornstein-Uhlenbeck (fOU) process, with a focus on cases where the fractional exponent (β) is 1/2 and 1/3, and comparisons with the non-fractional case (β=1). The goal is to provide a clear, self-contained implementation to calculate and visualize the probability density function (PDF) of this process.
 
