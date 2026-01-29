@@ -13,16 +13,22 @@ from core_computations import (
 # Set global matplotlib parameters for consistent styling across all plots.
 plt.rcParams.update(
     {
-        "figure.dpi": 250,
-        "axes.titlesize": 38,
-        "axes.labelsize": 32,
-        "xtick.labelsize": 28,
-        "ytick.labelsize": 28,
-        "legend.fontsize": 27,
-        "legend.title_fontsize": 27,
+        "figure.dpi": 350,
+        "axes.titlesize": 45,           # Main title size (set_title for single plots, suptitle for multi-panel)
+        "axes.labelsize": 32,           # X and Y axis labels
+        "xtick.labelsize": 32,          # X tick labels
+        "ytick.labelsize": 32,          # Y tick labels
+        "legend.fontsize": 27,          # Legend entries
+        "legend.title_fontsize": 27,    # Legend title
         "lines.linewidth": 3.0,
     }
 )
+
+# Custom font sizes for specific plot elements
+SUBPLOT_TITLE_SIZE = 38      # Titles of individual subplots in multi-panel figures
+ANNOTATION_SIZE = 12         # Size for annotations (L1, timing info)
+SPECTRAL_YLABEL_SIZE = 38    # Y-axis labels in spectral grid plots
+SPECTRAL_LABEL_SIZE = 28     # Shared X/Y labels in spectral grid plots
 
 def print_progress(iteration, total, prefix='', suffix='', decimals=1, length=50, fill='█'):
     """
@@ -136,8 +142,8 @@ def generate_main_figure(beta, times, colors, x_values, x0, theta, K_beta, use_c
         label=f"x₀ = {x0}",
     )
 
-    ax_main.set_xlabel("x", fontsize=22, fontweight="bold")
-    ax_main.set_ylabel("P(x,t)", fontsize=22, fontweight="bold")
+    ax_main.set_xlabel("x", fontweight="bold")
+    ax_main.set_ylabel("P(x,t)", fontweight="bold")
 
     # Set a custom title based on the beta value
     if abs(beta - 0.5) < 1e-12:
@@ -148,8 +154,7 @@ def generate_main_figure(beta, times, colors, x_values, x0, theta, K_beta, use_c
         title_beta = f"β = {beta}"
 
     ax_main.set_title(
-        f"Fractional OU Process: {title_beta}",
-        fontsize=24,
+        f"Fractional OU process: {title_beta}",
         fontweight="bold",
         pad=20,
     )
@@ -159,8 +164,6 @@ def generate_main_figure(beta, times, colors, x_values, x0, theta, K_beta, use_c
     # Add a legend
     lg = ax_main.legend(
         title="Times",
-        fontsize=20,
-        title_fontsize=20,
         loc="upper right",
         framealpha=0.95,
         edgecolor="gray",
@@ -234,8 +237,8 @@ def generate_comparison_panels(panel_times, x0, theta, K_beta, use_cache=True):
             alpha=0.85,
         )
 
-        ax.set_title(f"t = {t}", fontsize=18, fontweight="bold", pad=12)
-        ax.set_xlabel("x", fontsize=18, fontweight="bold")
+        ax.set_title(f"t = {t}", fontsize=SUBPLOT_TITLE_SIZE, fontweight="bold", pad=12)
+        ax.set_xlabel("x", fontweight="bold")
         ax.grid(True, alpha=0.3, linestyle="--", linewidth=0.7)
         ax.set_ylim(bottom=0)
 
@@ -249,7 +252,7 @@ def generate_comparison_panels(panel_times, x0, theta, K_beta, use_cache=True):
             rf"$L_{{1}} = {L1:.2e}$",
             transform=ax.transAxes,
             verticalalignment="top",
-            fontsize=14,
+            fontsize=plt.rcParams["legend.fontsize"],
             bbox=dict(
                 boxstyle="round,pad=0.5",
                 facecolor="white",
@@ -258,13 +261,13 @@ def generate_comparison_panels(panel_times, x0, theta, K_beta, use_cache=True):
             ),
         )
 
-        ax.legend(loc="upper right", fontsize=16, framealpha=0.95, edgecolor="gray")
+        ax.legend(loc="upper right", framealpha=0.95, edgecolor="gray")
 
-    axes[0].set_ylabel("P(x,t)", fontsize=18, fontweight="bold")
-    axes[2].set_ylabel("P(x,t)", fontsize=18, fontweight="bold")
+    axes[0].set_ylabel("P(x,t)", fontweight="bold")
+    axes[2].set_ylabel("P(x,t)", fontweight="bold")
 
     plt.suptitle(
-        "Comparison: β = 1/2 vs β = 1/3", fontsize=20, fontweight="bold", y=0.995
+        "Comparison: β = 1/2 vs β = 1/3", fontsize=plt.rcParams["axes.titlesize"], fontweight="bold", y=0.995
     )
     plt.tight_layout()
     # Save the figure
@@ -323,11 +326,11 @@ def _plot_spectral_subplot(ax, x_spec, ref_pdf, spec_pdf, N, timings_for_N, t):
     L1 = np.trapezoid(np.abs(spec_pdf - ref_pdf), x_spec)
     bbox_props = dict(boxstyle="round,pad=0.5", facecolor="white", alpha=0.85, edgecolor="gray")
     
-    ax.text(0.95, 0.95, rf"$L_{{1}}={L1:.2e}$", transform=ax.transAxes, fontsize=13,
+    ax.text(0.95, 0.95, rf"$L_{{1}}={L1:.2e}$", transform=ax.transAxes, fontsize=ANNOTATION_SIZE,
             verticalalignment='top', horizontalalignment='right', bbox=bbox_props)
 
     ax.text(0.05, 0.95, f"Time: {avg_time:.3f} ± {std_time:.3f} s", transform=ax.transAxes,
-            fontsize=11, verticalalignment='top', bbox=bbox_props)
+            fontsize=ANNOTATION_SIZE, verticalalignment='top', bbox=bbox_props)
 
     ax.grid(True, alpha=0.3, linestyle="--", linewidth=0.7)
     ax.set_ylim(bottom=0)
@@ -378,28 +381,28 @@ def generate_spectral_comparison_plot(
             # Set titles and labels for the outer plots
             if i == 0:
                 ax.set_title(
-                    f"N = {N}", fontsize=16, fontweight="bold", pad=10
+                    f"N = {N}", fontsize=SUBPLOT_TITLE_SIZE, fontweight="bold", pad=10
                 )
             if j == 0:
-                ax.set_ylabel(f"t = {t}", fontsize=15, fontweight="bold")
+                ax.set_ylabel(f"t = {t}", fontsize=SPECTRAL_YLABEL_SIZE, fontweight="bold")
 
             ax.tick_params(axis="both", labelsize=12)
 
     # Add shared axis labels
-    fig.text(0.5, 0.02, "x", ha="center", fontsize=20, fontweight="bold")
+    fig.text(0.5, 0.02, "x", ha="center", fontsize=SPECTRAL_LABEL_SIZE, fontweight="bold")
     fig.text(
         0.02,
         0.5,
         "P(x,t)",
         va="center",
         rotation="vertical",
-        fontsize=20,
+        fontsize=SPECTRAL_LABEL_SIZE,
         fontweight="bold",
     )
 
     plt.suptitle(
-        f"Spectral Series (Eq.18) vs Integral Map – {title_beta_str}",
-        fontsize=20,
+        f"Spectral Series vs Integral Map – {title_beta_str}",
+        fontsize=plt.rcParams["axes.titlesize"],
         fontweight="bold",
         y=0.995,
     )
@@ -457,11 +460,11 @@ def _plot_timing_data(timings, times_spec, Ns_list_timing):
             markersize=5,
         )
 
-    ax.set_xlabel("N (Number of terms in spectral series)", fontsize=20, fontweight="bold")
-    ax.set_ylabel("Average Computation Time (s)", fontsize=20, fontweight="bold")
-    ax.set_title("Computation Time vs. N for β = 1/3", fontsize=22, fontweight="bold")
+    ax.set_xlabel("N (Number of terms in spectral series)", fontweight="bold")
+    ax.set_ylabel("Average computation time (s)", fontweight="bold")
+    ax.set_title("Computation time vs. N for β = 1/3", fontweight="bold")
     ax.grid(True, alpha=0.35, linestyle="--", linewidth=0.7)
-    ax.legend(title="Time (t)", fontsize=18, title_fontsize=18)
+    ax.legend(title="Time (t)")
     # Linear scale on both axes for presentation clarity
     plt.tight_layout()
 
@@ -510,8 +513,8 @@ def _load_or_compute_frac_vs_nonfrac_data(cache_filename, comparison_times, comp
     for t in comparison_times:
         pdfs = {}
         for beta in comparison_betas:
-            # The non-fractional case (beta=0) is handled analytically in the plotting function
-            if abs(beta - 0.0) > 1e-12:
+            # The non-fractional case (beta=1) is handled analytically in the plotting function
+            if abs(beta - 1.0) > 1e-12:
                 pdfs[beta] = compute_pdf_vectorized(
                     comparison_x, t, x0, beta=beta, theta=theta, K_beta=K_beta, Ns=800
                 )
@@ -533,12 +536,12 @@ def _plot_frac_vs_nonfrac_data(plot_data, comparison_times, comparison_betas, co
     for i, t in enumerate(comparison_times):
         ax = axes[i]
         for beta_idx, beta in enumerate(comparison_betas):
-            # Handle the standard OU case (beta=0) analytically
-            if abs(beta - 0.0) < 1e-12:
+            # Handle the standard OU case (beta=1) analytically
+            if abs(beta - 1.0) < 1e-12:
                 mean = x0 * np.exp(-theta * t)
                 variance = (K_beta / theta) * (1.0 - np.exp(-2.0 * theta * t))
                 nf_pdf = (1.0 / np.sqrt(2.0 * np.pi * variance)) * np.exp(-0.5 * (comparison_x - mean) ** 2 / variance)
-                label = "β = 0 (Standard)"
+                label = "β = 1 (Standard)"
                 pdf_to_plot = nf_pdf
             # Handle fractional cases
             else:
@@ -551,17 +554,17 @@ def _plot_frac_vs_nonfrac_data(plot_data, comparison_times, comparison_betas, co
                 linewidth=2.5, alpha=0.85, label=label
             )
 
-        ax.set_title(f"t = {t}", fontsize=18, fontweight="bold", pad=12)
-        ax.set_xlabel("x", fontsize=18, fontweight="bold")
+        ax.set_title(f"t = {t}", fontsize=SUBPLOT_TITLE_SIZE, fontweight="bold", pad=12)
+        ax.set_xlabel("x", fontweight="bold")
         ax.grid(True, alpha=0.3, linestyle="--", linewidth=0.7)
         ax.set_ylim(bottom=0)
         if i % 2 == 0:
-            ax.set_ylabel("P(x,t)", fontsize=18, fontweight="bold")
-        ax.legend(loc="upper right", fontsize=16, framealpha=0.95, edgecolor="gray")
+            ax.set_ylabel("P(x,t)", fontweight="bold")
+        ax.legend(loc="upper right", framealpha=0.95, edgecolor="gray")
 
     plt.suptitle(
-        "Comparison: Fractional (β ≠ 0) vs Non-Fractional (β = 0) Cases",
-        fontsize=20, fontweight="bold", y=0.995
+        "Comparison: fractional (β ≠ 0) vs standard (β = 1) cases",
+        fontsize=plt.rcParams["axes.titlesize"], fontweight="bold", y=0.995
     )
     plt.tight_layout()
     figures_dir = "figures"

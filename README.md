@@ -1,6 +1,8 @@
 # Fractional Ornstein-Uhlenbeck Process Simulation
 
-This repository contains Python scripts to simulate the fractional Ornstein-Uhlenbeck (fOU) process, with a focus on cases where the fractional exponent (β) is 1/2 and 1/3, and comparisons with the non-fractional case (β=0). The goal is to provide a clear, self-contained implementation to calculate and visualize the probability density function (PDF) of this process.
+[![Python Tests](https://github.com/OWNER/REPO/actions/workflows/python-package.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/python-package.yml)
+
+This repository contains Python scripts to simulate the fractional Ornstein-Uhlenbeck (fOU) process, with a focus on cases where the fractional exponent (β) is 1/2 and 1/3, and comparisons with the non-fractional case (β=1). The goal is to provide a clear, self-contained implementation to calculate and visualize the probability density function (PDF) of this process.
 
 ## Repository Contents
 
@@ -25,7 +27,7 @@ The script generates the following outputs (saved under `scripts/ou_fractional_s
 - **`fig6_comparison_panels.png`**: Direct comparison between β = 1/2 and β = 1/3 at different time points.
 - **`fig6_spectral_vs_integral_beta_1_3.png`**: Spectral series vs integral map for β = 1/3.
 - **`fig6_spectral_vs_integral_beta_0_5.png`**: Spectral series vs integral map for β = 1/2.
-- **`fig6_fractional_vs_nonfractional.png`**: Fractional (β=1/2, β=1/3) vs non-fractional (β=0) comparison.
+- **`fig6_fractional_vs_nonfractional.png`**: Fractional (β=1/2, β=1/3) vs non-fractional (β=1) comparison.
 - **`fig_timing_vs_N_beta_1_3.png`**: Computation time vs number of spectral terms (linear scale).
 
 ## How to use the repository
@@ -62,7 +64,7 @@ Intermediate results are cached under `scripts/ou_fractional_scripts/data/`. If 
 To verify the correctness of the code, you can run the test suite:
 
 ```bash
-python scripts/ou_fractional_scripts/test_core_computations.py
+pytest scripts/ou_fractional_scripts/test_core_computations.py
 ```
 
 ## Purpose of the project

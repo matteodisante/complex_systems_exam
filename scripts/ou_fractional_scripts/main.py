@@ -60,8 +60,8 @@ def main(use_cache, num_cores):
     # Generate the plot showing computation time vs. N for the spectral method
     generate_timing_plot(num_cores=num_cores, use_cache=use_cache)
 
-    # Generate the plot comparing fractional cases with the standard non-fractional (beta=0) case
-    comparison_betas = [0.5, 1.0 / 3.0, 0.0]
+    # Generate the plot comparing fractional cases with the standard non-fractional (beta=1) case
+    comparison_betas = [0.5, 1.0 / 3.0, 1.0]
     comparison_times = [0.01, 0.1, 1.0, 10.0]
     generate_fractional_vs_nonfractional_plot(comparison_betas, comparison_times, x0, theta, K_beta, use_cache=use_cache)
 

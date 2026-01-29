@@ -114,7 +114,10 @@ class TestCoreComputations(unittest.TestCase):
     def test_spectral_series_stationary_state(self):
         """Tests if the spectral series PDF converges to the known stationary state for large t."""
         x_grid = np.linspace(-5, 5, 500)
-        t_large = 100.0  # A large time for the system to reach equilibrium
+        # NOTE: For fractional dynamics (beta < 1) the relaxation to equilibrium is much slower
+        # (typically algebraic rather than exponential). Using t=100 is not necessarily
+        # "large" for beta=1/3, so we pick a larger time to make this test robust.
+        t_large = 1e5
         x0 = 0.5
         beta = 1.0 / 3.0
         N = 5  # Few terms are needed as higher-order terms decay quickly

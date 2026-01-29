@@ -1,4 +1,4 @@
-name: Python Package (Docker)
+name: Python Tests
 
 on:
   push:
@@ -8,28 +8,24 @@ on:
 
 jobs:
   build-and-test:
-    # Run on an Ubuntu server that has Docker
     runs-on: ubuntu-latest
     steps:
-      # 1. Download your code (including the Dockerfile)
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Build the Docker image
-      #    Following the instructions in your Dockerfile
-      #    and "tags" it as 'my-app'
-      - name: Build Docker image
-        run: docker build -t my-app .
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-      # 3. Run Linting INSIDE the container
-      #    Starts the container and gives it the 'flake8 .' command
-      #    (Make sure flake8 is in requirements.txt)
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
       - name: Lint with flake8
-        run: docker run my-app flake8 .
+        run: flake8 .
         continue-on-error: true
 
-      # 4. Run Tests INSIDE the container
-      #    Starts another container and gives it the 'pytest' command
-      #    (Make sure pytest is in requirements.txt)
       - name: Test with pytest
-        run: docker run my-app pytest
+        run: pytest
