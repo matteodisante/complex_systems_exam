@@ -391,7 +391,7 @@ def generate_spectral_comparison_plot(
     # Add shared axis labels
     fig.text(0.5, 0.02, "x", ha="center", fontsize=SPECTRAL_LABEL_SIZE, fontweight="bold")
     fig.text(
-        0.02,
+        0.015,
         0.5,
         "P(x,t)",
         va="center",
@@ -401,12 +401,12 @@ def generate_spectral_comparison_plot(
     )
 
     plt.suptitle(
-        f"Spectral Series vs Integral Map – {title_beta_str}",
+        f"Spectral series vs integral map – {title_beta_str}",
         fontsize=plt.rcParams["axes.titlesize"],
         fontweight="bold",
         y=0.995,
     )
-    plt.tight_layout(rect=[0.03, 0.03, 1, 0.99])
+    plt.tight_layout(rect=[0.045, 0.03, 1, 0.99])
     # Save the figure
     figures_dir = "figures"
     os.makedirs(figures_dir, exist_ok=True)
@@ -560,7 +560,7 @@ def _plot_frac_vs_nonfrac_data(plot_data, comparison_times, comparison_betas, co
         ax.set_ylim(bottom=0)
         if i % 2 == 0:
             ax.set_ylabel("P(x,t)", fontweight="bold")
-        ax.legend(loc="upper right", framealpha=0.95, edgecolor="gray")
+        ax.legend(loc="upper right", framealpha=0.65, edgecolor="gray", fontsize=22)
 
     plt.suptitle(
         "Comparison: fractional (β ≠ 0) vs standard (β = 1) cases",
