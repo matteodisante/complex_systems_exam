@@ -1,72 +1,181 @@
-# Fractional Ornstein-Uhlenbeck Process Simulation
+# Complex Systems Exam - Stochastic Processes Simulations
 
 [![Python Tests](https://github.com/matteodisante/complex_systems_exam/actions/workflows/python-package.yml/badge.svg?branch=main)](https://github.com/matteodisante/complex_systems_exam/actions/workflows/python-package.yml)
 
-This repository contains Python scripts to simulate the fractional Ornstein-Uhlenbeck (fOU) process, with a focus on cases where the fractional exponent (β) is 1/2 and 1/3, and comparisons with the non-fractional case (β=1). The goal is to provide a clear, self-contained implementation to calculate and visualize the probability density function (PDF) of this process.
+This repository contains Python implementations of various stochastic processes and anomalous diffusion phenomena studied in the Complex Systems course. The main focus is on fractional processes, Lévy flights, Continuous Time Random Walks (CTRW), and the fractional Ornstein-Uhlenbeck process.
 
-## Repository Contents
+## 📁 Repository Structure
 
-- **`scripts/ou_fractional_scripts/main.py`**: Main entry point for generating figures.
-- **`scripts/ou_fractional_scripts/core_computations.py`**: Core numerical routines (kernel, subordination, Mittag-Leffler, spectral series).
-- **`scripts/ou_fractional_scripts/helpers.py`**: Plotting helpers and caching logic.
-- **`scripts/ou_fractional_scripts/test_core_computations.py`**: Unit tests for the core functions.
-- **`scripts/`**: Additional notebooks and scripts for related simulations and plots.
-
-## What the code does
-
-The main script implements two approaches to calculate the PDF of the fOU process:
-
-1.  **Integral Map Method**: This method is based on the analytical Smirnov form of the Lévy density. The PDF `P(x,t)` is calculated as an integral of the convolution between the waiting time PDF `n(s,t)` and the Gaussian kernel of the Ornstein-Uhlenbeck process `P1(x,s)`. The integration is performed numerically over a grid of `s` values.
-
-2.  **Spectral Series Method**: This alternative approach calculates the PDF as a series of eigenfunctions of the Ornstein-Uhlenbeck process (Hermite functions). The time evolution is captured by a factor that includes the Mittag-Leffler function.
-
-The script generates the following outputs (saved under `scripts/ou_fractional_scripts/figures/`):
-
-- **`fig6_beta_0_500.png`**: Time evolution of the PDF for β = 1/2.
-- **`fig6_beta_0_333.png`**: Time evolution of the PDF for β = 1/3.
-- **`fig6_comparison_panels.png`**: Direct comparison between β = 1/2 and β = 1/3 at different time points.
-- **`fig6_spectral_vs_integral_beta_1_3.png`**: Spectral series vs integral map for β = 1/3.
-- **`fig6_spectral_vs_integral_beta_0_5.png`**: Spectral series vs integral map for β = 1/2.
-- **`fig6_fractional_vs_nonfractional.png`**: Fractional (β=1/2, β=1/3) vs non-fractional (β=1) comparison.
-- **`fig_timing_vs_N_beta_1_3.png`**: Computation time vs number of spectral terms (linear scale).
-
-## How to use the repository
-
-### Prerequisites
-
-Make sure you have the following Python libraries installed:
-
-- `numpy`
-- `matplotlib`
-- `scipy`
-
-You can install them using pip:
-```bash
-pip install numpy matplotlib scipy
+```
+complex_systems_exam/
+├── .github/workflows/       # CI/CD pipeline
+│   └── python-package.yml   # Automated testing
+├── scripts/
+│   ├── CTRW_sims/           # Continuous Time Random Walk simulations
+│   │   ├── mc_sims.py       # Monte Carlo simulations
+│   │   └── mittag_leffler_plot.py
+│   ├── integral-map_subordination/  # Subordination processes
+│   │   └── subordination.py # Time subordination visualization
+│   ├── levy_mittag-leffler/ # Lévy and Mittag-Leffler distributions
+│   │   ├── levy_mittag_gen.py      # Random generators
+│   │   └── plot_phi_1.py           # Density plots
+│   └── ou_fractional_scripts/      # Fractional Ornstein-Uhlenbeck
+│       ├── main.py                 # Main entry point
+│       ├── core_computations.py    # Core numerical routines
+│       ├── helpers.py              # Plotting and caching utilities
+│       └── test_core_computations.py # Unit tests
+├── requirements.txt         # Python dependencies
+├── pytest.ini              # Test configuration
+└── README.md               # This file
 ```
 
-### Run the simulation
+## 🎯 Project Components
 
-To run the simulation and generate the plots, execute:
+### 1. Fractional Ornstein-Uhlenbeck Process (`ou_fractional_scripts/`)
 
+Main implementation of the fractional Ornstein-Uhlenbeck (fOU) process with focus on β = 1/2 and β = 1/3.
+
+**Methods implemented:**
+- **Integral Map Method**: Based on Smirnov's Lévy density form, computing P(x,t) via numerical convolution
+- **Spectral Series Method**: Hermite function expansion with Mittag-Leffler time evolution
+
+**Generated figures:**
+- Time evolution of PDF for different β values
+- Spectral vs integral map comparisons
+- Fractional vs non-fractional process comparisons
+- Computation time analysis
+
+**Run:**
 ```bash
 python scripts/ou_fractional_scripts/main.py
 ```
 
-Plots are saved under `scripts/ou_fractional_scripts/figures/`.
+### 2. Continuous Time Random Walks (`CTRW_sims/`)
 
-#### Caching
+Monte Carlo simulations of CTRWs with Lévy-stable jumps and Mittag-Leffler waiting times.
 
-Intermediate results are cached under `scripts/ou_fractional_scripts/data/`. If the cache files exist, the script loads them to avoid recomputation. Use `--no-cache` to force recomputation.
+**Features:**
+- Lévy-stable jump generator (Chambers-Mallows-Stuck algorithm)
+- Mittag-Leffler waiting time generator
+- Ensemble simulations with configurable parameters
+- Mean Square Displacement (MSD) analysis
 
-### Run the tests
+**Run:**
+```bash
+python scripts/CTRW_sims/mc_sims.py
+```
 
-To verify the correctness of the code, you can run the test suite:
+### 3. Lévy and Mittag-Leffler Distributions (`levy_mittag-leffler/`)
+
+Generation and visualization of Lévy-stable and Mittag-Leffler distributions.
+
+**Features:**
+- Random number generators for both distributions
+- Power-law tail analysis
+- Density function plots
+- Theoretical vs empirical distribution comparison
+
+**Run:**
+```bash
+python scripts/levy_mittag-leffler/levy_mittag_gen.py
+python scripts/levy_mittag-leffler/plot_phi_1.py
+```
+
+### 4. Time Subordination (`integral-map_subordination/`)
+
+Visualization of subordination processes and inverse Lévy subordinators.
+
+**Features:**
+- Single trajectory visualization
+- Ensemble analysis
+- Subordinator T(τ) plots
+- Physical time vs operational time mapping
+
+**Run:**
+```bash
+python scripts/integral-map_subordination/subordination.py
+```
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- Python 3.11 or higher
+- pip package manager
+
+### Installation
+
+1. Clone the repository:
+```bash
+git clone https://github.com/matteodisante/complex_systems_exam.git
+cd complex_systems_exam
+```
+
+2. Create a virtual environment (recommended):
+```bash
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+```
+
+3. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+## 🧪 Running Tests
+
+The repository includes automated tests for the fractional OU process:
 
 ```bash
+# Run all tests
+pytest
+
+# Run with verbose output
+pytest -v
+
+# Run specific test file
 pytest scripts/ou_fractional_scripts/test_core_computations.py
 ```
 
-## Purpose of the project
+Tests are automatically run on every push via GitHub Actions CI/CD pipeline.
 
-The purpose of this repository is to provide a clear, working, and verified example of how to simulate the fractional Ornstein-Uhlenbeck process. It can be useful for students, researchers, or anyone interested in stochastic processes and complex systems, both as a learning tool and as a basis for further research.
+## 📊 Output Files
+
+Generated figures and data are saved in subdirectories:
+
+- `scripts/ou_fractional_scripts/figures/` - fOU process visualizations
+- `scripts/ou_fractional_scripts/data/` - Cached computation results
+- `scripts/CTRW_sims/*.png` - CTRW simulation outputs
+- `scripts/levy_mittag-leffler/*.png` - Distribution plots
+- `scripts/integral-map_subordination/*.png` - Subordination visualizations
+
+## � Dependencies
+
+- `numpy>=2.3.3` - Numerical computations
+- `scipy>=1.16.2` - Special functions and integration
+- `matplotlib>=3.10.7` - Plotting and visualization
+- `mpmath>=1.3.0` - High-precision arithmetic
+- `pytest>=8.4.2` - Testing framework
+- `flake8>=7.1.0` - Code linting
+
+## 🤝 Contributing
+
+This is an academic project for the Complex Systems course. For issues or improvements, please open an issue or pull request.
+
+## 📝 License
+
+Academic use only - part of university coursework.
+
+## 👤 Author
+
+Matteo Di Sante - Complex Systems Exam, University Project
+
+## 📌 Notes
+
+- **Caching**: The fOU scripts cache intermediate results in `data/` directories to speed up repeated computations
+- **CI/CD**: Automated tests run on every push to ensure code correctness
+- **Reproducibility**: Random seeds are set for reproducible results where applicable
+
+---
+
+*Repository created for Complex Systems examination - First Semester, First Year*
