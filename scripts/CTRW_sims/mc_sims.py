@@ -1,8 +1,16 @@
+import os
+
+# Limita numpy a 1 thread per evitare oversubscription con multiprocessing
+os.environ.setdefault('MKL_NUM_THREADS', '1')
+os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')
+os.environ.setdefault('OMP_NUM_THREADS', '1')
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from scipy.special import gamma
-from scipy.integrate import quad
+from scipy.integrate import quad, simpson
+from multiprocessing import Pool, cpu_count
 
 # ==============================================================================
 # 1. GENERATORI DI NUMERI CASUALI (Basati su Eq. 19 e 20 del Paper)
@@ -75,7 +83,7 @@ def simulate_trajectory(alpha, beta, gamma_t, gamma_x, n_jumps=1000):
     
     return t, x
 
-def simulate_final_positions(alpha, beta, gamma_t, gamma_x, t_target, n_walkers=10000):
+def simulate_final_positions(alpha, beta, gamma_t, gamma_x, t_target, n_walkers=10000, block_size=2000):
     """
     Calcola SOLO la posizione finale di n_walkers al tempo t_target.
     Usa blocchi per risparmiare memoria se n_walkers è alto.
@@ -83,35 +91,38 @@ def simulate_final_positions(alpha, beta, gamma_t, gamma_x, t_target, n_walkers=
     # Stima euristica dei passi necessari:
     # Se beta è piccolo, i tempi sono lunghi -> servono pochi passi.
     # Se beta è grande (~1), servono più passi.
-    estimated_steps = int(20 + 50 * t_target / gamma_t) if gamma_t > 0 else 1000
+    estimated_steps = int(20 + 30 * t_target / gamma_t) if gamma_t > 0 else 1000
     if estimated_steps < 100: estimated_steps = 100
-    if estimated_steps > 10000: estimated_steps = 10000 # Cap di sicurezza
+    if estimated_steps > 5000: estimated_steps = 5000 # Cap ridotto per risparmiare RAM
     
     final_pos = np.zeros(n_walkers)
-    
-    # Generazione vettoriale
-    taus = generate_mittag_leffler(beta, gamma_t, (n_walkers, estimated_steps))
-    jumps = generate_levy_stable(alpha, gamma_x, (n_walkers, estimated_steps))
-    
-    times = np.cumsum(taus, axis=1)
-    positions = np.cumsum(jumps, axis=1)
-    
-    # Logica vettoriale per trovare la posizione a t_target
-    # Creiamo una maschera dove il tempo è ANCORA minore del target
-    mask_still_walking = times < t_target
-    
-    # Contiamo quanti passi ha fatto ogni walker (somma dei True lungo l'asse)
-    steps_taken = np.sum(mask_still_walking, axis=1)
-    
-    # L'indice da prendere è steps_taken - 1. 
-    # Se steps_taken è 0, il walker è ancora all'origine (posizione 0).
-    for i in range(n_walkers):
-        idx = steps_taken[i] - 1
-        if idx >= 0:
-            final_pos[i] = positions[i, idx]
-        else:
-            final_pos[i] = 0.0
-            
+
+    # Elaborazione a blocchi per ridurre la RAM e migliorare la parallelizzazione
+    if block_size is None or block_size <= 0:
+        block_size = n_walkers
+
+    for start in range(0, n_walkers, block_size):
+        end = min(start + block_size, n_walkers)
+        batch_size = end - start
+
+        # Generazione vettoriale sul blocco
+        taus = generate_mittag_leffler(beta, gamma_t, (batch_size, estimated_steps))
+        jumps = generate_levy_stable(alpha, gamma_x, (batch_size, estimated_steps))
+
+        times = np.cumsum(taus, axis=1)
+        positions = np.cumsum(jumps, axis=1)
+
+        # Logica vettoriale per trovare la posizione a t_target
+        mask_still_walking = times < t_target
+        steps_taken = np.sum(mask_still_walking, axis=1)
+
+        idx = steps_taken - 1
+        idx_clipped = np.clip(idx, 0, estimated_steps - 1)
+        batch_positions = positions[np.arange(batch_size), idx_clipped]
+        batch_positions[idx < 0] = 0.0
+
+        final_pos[start:end] = batch_positions
+
     return final_pos
 
 # ==============================================================================
@@ -137,137 +148,150 @@ def get_theoretical_W(xi_vals, alpha, beta):
     if alpha == 2.0 and beta == 1.0:
         return (1/np.sqrt(4*np.pi)) * np.exp(-xi_vals**2 / 4)
 
-    # Altrimenti integrazione numerica
-    k_vals = np.linspace(0, 10, 100) # Grid di integrazione k
-    
-    # Pre-calcoliamo E_beta(-k^alpha)
-    ml_vals = np.array([mittag_leffler_func(k**alpha, beta) for k in k_vals])
-    
+    # Altrimenti integrazione numerica con quad (integratore adattivo)
+    # Integrazione per segmenti per ridurre instabilità ai k alti
     w_res = []
+    k_max = 120.0  # Aumentato intervallo in k per ridurre fluttuazioni
+    segments = [(0, 20), (20, 40), (40, 60), (60, 80), (80, k_max)]
     for xi in xi_vals:
-        # Integrale coseno: (1/pi) * int( cos(k*xi) * ML(k) )
-        term = np.cos(k_vals * xi) * ml_vals
-        val = np.trapz(term, k_vals) / np.pi
-        w_res.append(val)
+        if np.isclose(xi, 0.0):
+            integrand = lambda k: mittag_leffler_func(k**alpha, beta)
+            val, _ = quad(integrand, 0, k_max, limit=600, epsabs=1e-10, epsrel=1e-8)
+        else:
+            integrand = lambda k: mittag_leffler_func(k**alpha, beta)
+            total = 0.0
+            for a, b in segments:
+                seg, _ = quad(
+                    integrand,
+                    a,
+                    b,
+                    weight='cos',
+                    wvar=xi,
+                    limit=300,
+                    epsabs=1e-10,
+                    epsrel=1e-8,
+                )
+                total += seg
+            val = total
+        w_res.append(val / np.pi)
     return np.array(w_res)
 
 # ==============================================================================
 # 4. PLOTTING DELLE FIGURE
 # ==============================================================================
 
-def plot_fig_1():
-    print("--- Generazione Figura 1 ---")
-    alpha, beta = 1.7, 0.8
-    gamma_t = 0.1
+def _compute_single_curve(args):
+    """Worker function per parallelizzare il calcolo di una singola curva gamma_t."""
+    case_idx, alpha, beta, gt, t_fixed, n_walkers, block_size, bins = args
+    gx = gt**(beta/alpha)
+    pos = simulate_final_positions(alpha, beta, gt, gx, t_fixed, n_walkers, block_size=block_size)
+    
+    # Scaling Variable: xi = x / t^(beta/alpha)
+    scale_factor = t_fixed**(beta/alpha)
+    scaled_pos = pos / scale_factor
+    
+    # Istogramma
+    y_hist, bin_edges = np.histogram(scaled_pos, bins=bins, range=(-4, 4), density=True)
+    x_hist = (bin_edges[:-1] + bin_edges[1:]) / 2
+    
+    return case_idx, x_hist, y_hist, gt
+
+def plot_fig_1(alpha=1.7, beta=0.8, n_realizations=4, n_jumps=500, gamma_t=0.1):
+    print("--- Generazione Figura 1 (4 realizzazioni) ---")
+
     gamma_x = gamma_t**(beta/alpha)
-    
-    t, x = simulate_trajectory(alpha, beta, gamma_t, gamma_x, n_jumps=500)
-    
-    plt.figure(figsize=(10, 6))
-    plt.step(t, x, where='post', color='navy', linewidth=1.2)
-    plt.xlabel(r'Time $t$', fontsize=14)
-    plt.ylabel(r'Position $x(t)$', fontsize=14)
-    plt.title(rf'Fig. 1: Trajectory ($\alpha={alpha}, \beta={beta}$)', fontsize=16)
-    plt.xlim(0, np.percentile(t, 95)) # Zoom automatico per evitare outlier estremi
-    plt.grid(True, linestyle='--', alpha=0.5)
-    plt.tight_layout()
+
+    fig, axes = plt.subplots(2, 2, figsize=(12, 7), constrained_layout=True)
+    axes = axes.ravel()
+
+    for idx, ax in enumerate(axes[:n_realizations], start=1):
+        t, x = simulate_trajectory(alpha, beta, gamma_t, gamma_x, n_jumps=n_jumps)
+
+        ax.step(t, x, where='post', color='navy', linewidth=1.1)
+        ax.set_xlabel(r'Time $t$', fontsize=14)
+        ax.set_ylabel(r'Position $x(t)$', fontsize=14)
+        ax.set_title(rf'Realization {idx}: $\alpha={alpha}, \beta={beta}$', fontsize=16, fontweight='bold')
+        ax.tick_params(axis='both', which='major', labelsize=12)
+        ax.set_xlim(0, np.percentile(t, 95))
+        ax.grid(True, linestyle='--', alpha=0.4)
+
     plt.show()
 
-def plot_fig_3():
-    print("--- Generazione Figura 3 (3D) ---")
-    alpha, beta = 1.7, 0.8
-    gamma_t = 0.1
-    gamma_x = gamma_t**(beta/alpha)
-    
-    # Parametri simulazione
-    n_walkers = 15000
-    times = np.linspace(0.1, 10, 20) # 20 slice temporali
-    bins = np.linspace(-3, 3, 50)    # Griglia spaziale
-    
-    # Matrice per Z
-    Z = []
-    
-    for t in times:
-        pos = simulate_final_positions(alpha, beta, gamma_t, gamma_x, t, n_walkers)
-        hist, _ = np.histogram(pos, bins=bins, density=True)
-        Z.append(hist)
-    
-    Z = np.array(Z)
-    X_grid, Y_grid = np.meshgrid((bins[:-1]+bins[1:])/2, times)
-    
-    fig = plt.figure(figsize=(12, 9))
-    ax = fig.add_subplot(111, projection='3d')
-    
-    # Plot Surface con stile simile al paper
-    surf = ax.plot_surface(X_grid, Y_grid, Z, cmap=cm.viridis, 
-                           edgecolor='k', linewidth=0.2, alpha=0.9, rstride=1, cstride=1)
-    
-    ax.set_xlabel(r'$x$', fontsize=14)
-    ax.set_ylabel(r'$t$', fontsize=14)
-    ax.set_zlabel(r'$p(x,t)$', fontsize=14)
-    ax.set_title(rf'Fig. 3: PDF Evolution ($\alpha={alpha}, \beta={beta}$)', fontsize=16)
-    
-    # View angle ottimizzato
-    ax.view_init(elev=35, azim=-70)
-    ax.set_xlim(-3, 3)
-    ax.set_ylim(0, 10)
-    ax.set_zlim(0, np.max(Z)*1.1)
-    
-    plt.tight_layout()
-    plt.show()
 
-def plot_fig_4():
-    print("--- Generazione Figura 4 (Scaling) - Attendere prego... ---")
-    # Parametri: (Alpha, Beta, Label)
+def plot_fig_4(n_cores=None, n_walkers=40000, bins=120, seed=1234, block_size=2000):
+    """
+    Genera Figura 4 con scaling laws.
+    
+    Parameters:
+    -----------
+    n_cores : int, optional
+        Numero di core da usare per la parallelizzazione.
+        Se None, usa tutti i core disponibili.
+        Se 1, esegue in modo seriale (utile per debug).
+    """
+    if n_cores is None:
+        n_cores = cpu_count()
+    
+    print(f"--- Generazione Figura 4 (Scaling) - Usando {n_cores} core(s) ---")
+    print(f"Configurazione: n_walkers={n_walkers}, bins={bins}, block_size={block_size}, t_fixed={5.0}, seed={seed}")
+    np.random.seed(seed)
+    
+    # Parametri: (Alpha, Beta, Label, gamma_t values)
     cases = [
-        (2.0, 1.0, 'Standard Diffusion'),
-        (1.7, 0.8, 'Fractional 1'),
-        (1.0, 0.9, 'Fractional 2')
+        (2.0, 1.0, 'Standard Diffusion', [0.01, 0.80, 1.00, 1.20, 1.40]),
+        (1.7, 0.8, 'Fractional 1', [0.0001, 0.1000, 0.3000, 0.5000, 0.7000]),
+        (1.0, 0.9, 'Fractional 2', [0.004, 0.600, 0.800, 1.000, 1.200])
     ]
     
-    # Tempi diversi per verificare lo scaling
-    gamma_vals = [1.0, 0.2, 0.05] 
     t_fixed = 5.0
-    n_walkers = 20000
     
     fig, axes = plt.subplots(3, 1, figsize=(8, 14))
     
-    for i, (alpha, beta, label) in enumerate(cases):
-        ax = axes[i]
-        print(f"   Calcolo caso {i+1}/3: alpha={alpha}, beta={beta}")
-        
-        # 1. Simulazioni (Punti colorati)
+    # Prepara TUTTI i task per TUTTI i casi contemporaneamente
+    all_tasks = []
+    for i, (alpha, beta, label, gamma_vals) in enumerate(cases):
+        print(f"   Caso {i+1}: alpha={alpha}, beta={beta}, gamma_t={gamma_vals}")
         for gt in gamma_vals:
-            gx = gt**(beta/alpha)
-            pos = simulate_final_positions(alpha, beta, gt, gx, t_fixed, n_walkers)
-            
-            # Scaling Variable: xi = x / t^(beta/alpha)
-            scale_factor = t_fixed**(beta/alpha)
-            scaled_pos = pos / scale_factor
-            
-            # Istogramma
-            y_hist, bin_edges = np.histogram(scaled_pos, bins=60, range=(-4, 4), density=True)
-            x_hist = (bin_edges[:-1] + bin_edges[1:]) / 2
-            
-            # PDF scalata: P_scaled = P_real * scale_factor
-            # Nota: numpy density=True fa già l'integrale a 1 sullo spazio scalato, quindi è ok.
-            
-            ax.plot(x_hist, y_hist, '.', label=rf'$\gamma_t={gt}$')
+            all_tasks.append((i, alpha, beta, gt, t_fixed, n_walkers, block_size, bins))
+    
+    print(f"   Totale task da eseguire: {len(all_tasks)}")
+    
+    # Esegui TUTTI i task in parallelo
+    if n_cores > 1:
+        with Pool(n_cores) as pool:
+            all_results = pool.map(_compute_single_curve, all_tasks)
+    else:
+        all_results = [_compute_single_curve(task) for task in all_tasks]
+    
+    # Raggruppa i risultati per caso
+    results_by_case = {0: [], 1: [], 2: []}
+    for case_idx, x_hist, y_hist, gt in all_results:
+        results_by_case[case_idx].append((x_hist, y_hist, gt))
+    
+    # Plot dei risultati
+    for i, (alpha, beta, label, gamma_vals) in enumerate(cases):
+        ax = axes[i]
+        print(f"   Plotting caso {i+1}/3: alpha={alpha}, beta={beta}")
+        
+        # Plot simulazioni
+        for x_hist, y_hist, gt in results_by_case[i]:
+            ax.plot(x_hist, y_hist, '-', linewidth=1.2, label=rf'$\gamma_t={gt}$')
             
         # 2. Teoria (Linea Nera)
-        xi_theory = np.linspace(-4, 4, 60)
+        xi_theory = np.linspace(-4, 4, 200)  # Aumentato sampling per curva liscia
         try:
             w_theory = get_theoretical_W(xi_theory, alpha, beta)
-            ax.plot(xi_theory, w_theory, 'k-', linewidth=2, label='Theory')
+            ax.plot(xi_theory, w_theory, 'k-', linewidth=1.8, label='Theory')
         except Exception as e:
             print(f"Errore calcolo teoria: {e}")
 
-        ax.set_title(rf'Scaling: $\alpha={alpha}, \beta={beta}$', fontsize=14)
-        ax.set_xlabel(r'$\xi = x / t^{\beta/\alpha}$', fontsize=12)
-        ax.set_ylabel(r'$t^{\beta/\alpha} p(x,t)$', fontsize=12)
+        ax.set_title(rf'Scaling: $\alpha={alpha}, \beta={beta}$', fontsize=18, fontweight='bold')
+        ax.set_xlabel(r'$\xi = x / t^{\beta/\alpha}$', fontsize=16)
+        ax.set_ylabel(r'$t^{\beta/\alpha} p(x,t)$', fontsize=16)
+        ax.tick_params(axis='both', which='major', labelsize=14)
         ax.set_xlim(-4, 4)
         ax.grid(True, alpha=0.3)
-        if i==0: ax.legend()
+        if i==0: ax.legend(fontsize=12)
         
     plt.tight_layout()
     plt.show()
@@ -277,7 +301,18 @@ def plot_fig_4():
 # ==============================================================================
 
 if __name__ == "__main__":
+    # Configurazione numero di core
+    # None = usa tutti i core disponibili
+    # 1 = esecuzione seriale (no parallelizzazione)
+    # 4 = usa 4 core
+    N_CORES = 8  # Cambia questo valore per controllare il parallelismo
+    
+    print(f"Core disponibili: {cpu_count()}")
+    if N_CORES is None:
+        print(f"Verranno usati tutti i {cpu_count()} core disponibili")
+    else:
+        print(f"Verranno usati {N_CORES} core")
+    
     # Eseguiamo le funzioni. Puoi commentarne alcune se vuoi testarne solo una.
     plot_fig_1()
-    plot_fig_3()
-    plot_fig_4()
+    plot_fig_4(n_cores=N_CORES)
