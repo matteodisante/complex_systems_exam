@@ -38,7 +38,7 @@ colors = plt.cm.plasma(np.linspace(0.1, 0.9, len(beta_values)))
 
 # Define tau ranges
 tau_linear = np.linspace(0.01, 2, 400)
-tau_loglog = np.logspace(-2, np.log10(5), 400)
+tau_loglog = np.logspace(-2, np.log10(9), 400)
 
 print("Computing probability density φ(t)...")
 
