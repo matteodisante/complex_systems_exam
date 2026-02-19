@@ -137,7 +137,7 @@ fig1, ax1 = plt.subplots(1, 2, figsize=(18, 7)) # Wider figure for keynote
 ax1[0].hist(levy_samples, bins=200, range=(-10, 10), density=True, 
             color='skyblue', edgecolor='black', alpha=0.6)
 ax1[0].set_title(fr'Lévy $\alpha$-Stable (Linear)' + '\n' + fr'$\alpha={ALPHA}$')
-ax1[0].set_xlabel('Value')
+ax1[0].set_xlabel(r'Jump value $\xi$')
 ax1[0].set_ylabel('Density')
 
 # Right: Log-Log Scale
@@ -148,7 +148,7 @@ ax1[1].hist(levy_pos, bins=bins_levy, density=True,
 ax1[1].set_xscale('log')
 ax1[1].set_yscale('log')
 ax1[1].set_title(r'Lévy Positive Tail (Log-Log)' + '\n' + r'Expected Slope $\approx -2.5$')
-ax1[1].set_xlabel('Value (log)')
+ax1[1].set_xlabel(r'Jump value $\xi$')
 
 extract_slope_and_plot(ax1[1], levy_pos, bins_levy, ALPHA, percentile_cutoff=95)
 ax1[1].legend(frameon=True, framealpha=1, shadow=True) # Pop-out legend
